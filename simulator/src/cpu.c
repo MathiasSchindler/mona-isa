@@ -787,9 +787,13 @@ Trap cpu_step(Cpu *c, Mem *m) {
                 case 0x4: res = a ^ (uint64_t)imm; break;
                 case 0x6: res = a | (uint64_t)imm; break;
                 case 0x7: res = a & (uint64_t)imm; break;
-                case 0x1: res = a << (get_bits(insn, 25, 20) & 0x3F); break;
+                case 0x1:
+                    if (f7 != 0x00) { trap_entry(c, 2, insn, false); return TRAP_NONE; }
+                    res = a << (get_bits(insn, 25, 20) & 0x3F);
+                    break;
                 case 0x5: {
                     uint32_t shamt = get_bits(insn, 25, 20) & 0x3F;
+                    if (f7 != 0x00 && f7 != 0x20) { trap_entry(c, 2, insn, false); return TRAP_NONE; }
                     res = (f7 == 0x20) ? ((int64_t)a >> shamt) : (a >> shamt);
                     break;
                 }

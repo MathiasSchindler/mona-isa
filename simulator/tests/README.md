@@ -39,6 +39,8 @@ Current self-checking tests:
 - fib-test (loop)
 - prime-test (trial division)
 - prime-test2 (efficient trial division)
+- mext-test (mul/div/rem variants)
+- illegal-shift-test (shift-imm encoding legality)
 - reverse-test (string reverse)
 - palindrome-test (string compare)
 - amo-test (amoswap.w/d atomics)

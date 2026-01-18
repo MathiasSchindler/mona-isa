@@ -5,6 +5,7 @@ This document describes the software simulator for the MINA architecture: what i
 
 ## Capabilities
 - Executes MINA base integer ISA (implemented subset) with arithmetic, logic, branches, jumps, loads/stores, and system ops.
+- Implements M-extension ops: `mul`, `mulh`, `mulhsu`, `mulhu`, `div`, `divu`, `rem`, `remu`.
 - Implements CSR subset for M/S-mode control and trap handling.
 - Implements capability checks (tagged capabilities, bounds, permissions) and CAP instructions.
 - Implements tensor instructions and supported tensor formats.
@@ -21,6 +22,7 @@ This document describes the software simulator for the MINA architecture: what i
 ## Limitations
 - Not cycle-accurate; no timing model or pipeline behavior.
 - Incomplete ISA coverage; unsupported instructions trap as unimplemented.
+- Shift-immediate encodings with non-zero `imm[11:6]` trap as illegal (per ISA).
 - AMO coverage is limited to `amoswap.w`/`amoswap.d` (no other atomic ops yet).
 - No external interrupts or timers beyond basic CSR/trap plumbing.
 - No MMU/virtual memory; all addressing is physical within simulator memory.

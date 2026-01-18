@@ -2,6 +2,11 @@
 
 ## Milestones
 
+## Highest Priority (Immediate)
+
+- Implement all instructions defined in the ISA spec in the simulator.
+- Add tests to validate each instruction’s behavior in the simulator.
+
 ### M1 — Minimal ABI + Syscall Spec (docs + tests)
 - Define calling convention (arg/ret regs, caller/callee-saved, stack alignment).
 - Document syscall numbers and semantics (read/write/exit, errors).
