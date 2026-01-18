@@ -58,6 +58,18 @@ cmp -s "$OUT/system-ret-deleg-test.out" "$ROOT/tests/expected/system-ret-deleg-t
 rm -f "$OUT/system-ret-deleg-test.out"
 echo "PASS system-ret-deleg-test"
 
+$AS "$ROOT/../mina-as/tests/src/system-ret-bits-test.s" -o "$OUT/system-ret-bits-test.elf"
+$SIM "$OUT/system-ret-bits-test.elf" > "$OUT/system-ret-bits-test.out" 2>/dev/null
+cmp -s "$OUT/system-ret-bits-test.out" "$ROOT/tests/expected/system-ret-bits-test.txt"
+rm -f "$OUT/system-ret-bits-test.out"
+echo "PASS system-ret-bits-test"
+
+$AS "$ROOT/../mina-as/tests/src/interrupt-basic-test.s" -o "$OUT/interrupt-basic-test.elf"
+$SIM "$OUT/interrupt-basic-test.elf" > "$OUT/interrupt-basic-test.out" 2>/dev/null
+cmp -s "$OUT/interrupt-basic-test.out" "$ROOT/tests/expected/interrupt-basic-test.txt"
+rm -f "$OUT/interrupt-basic-test.out"
+echo "PASS interrupt-basic-test"
+
 $AS "$ROOT/../mina-as/tests/src/cap-test.s" -o "$OUT/cap-test.elf"
 $SIM "$OUT/cap-test.elf" > "$OUT/cap-test.out" 2>/dev/null
 cmp -s "$OUT/cap-test.out" "$ROOT/tests/expected/cap-test.txt"
@@ -189,6 +201,24 @@ $SIM "$OUT/tensor-stride0-test.elf" > "$OUT/tensor-stride0-test.out" 2>/dev/null
 cmp -s "$OUT/tensor-stride0-test.out" "$ROOT/tests/expected/tensor-stride0-test.txt"
 rm -f "$OUT/tensor-stride0-test.out"
 echo "PASS tensor-stride0-test"
+
+$AS "$ROOT/../mina-as/tests/src/tensor-naninf-test.s" -o "$OUT/tensor-naninf-test.elf"
+$SIM "$OUT/tensor-naninf-test.elf" > "$OUT/tensor-naninf-test.out" 2>/dev/null
+cmp -s "$OUT/tensor-naninf-test.out" "$ROOT/tests/expected/tensor-naninf-test.txt"
+rm -f "$OUT/tensor-naninf-test.out"
+echo "PASS tensor-naninf-test"
+
+$AS "$ROOT/../mina-as/tests/src/tensor-sat-test.s" -o "$OUT/tensor-sat-test.elf"
+$SIM "$OUT/tensor-sat-test.elf" > "$OUT/tensor-sat-test.out" 2>/dev/null
+cmp -s "$OUT/tensor-sat-test.out" "$ROOT/tests/expected/tensor-sat-test.txt"
+rm -f "$OUT/tensor-sat-test.out"
+echo "PASS tensor-sat-test"
+
+$AS "$ROOT/../mina-as/tests/src/tensor-illegal-fmt-test.s" -o "$OUT/tensor-illegal-fmt-test.elf"
+$SIM "$OUT/tensor-illegal-fmt-test.elf" > "$OUT/tensor-illegal-fmt-test.out" 2>/dev/null
+cmp -s "$OUT/tensor-illegal-fmt-test.out" "$ROOT/tests/expected/tensor-illegal-fmt-test.txt"
+rm -f "$OUT/tensor-illegal-fmt-test.out"
+echo "PASS tensor-illegal-fmt-test"
 
 $AS "$ROOT/../mina-as/tests/src/amo-test.s" -o "$OUT/amo-test.elf"
 $SIM "$OUT/amo-test.elf" > "$OUT/amo-test.out" 2>/dev/null

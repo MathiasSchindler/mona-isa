@@ -20,11 +20,11 @@ REPORT_TEMPLATE = """# Spec vs Simulator Audit
 
 - **Base integer ISA:** Implemented (ALU, shifts, branches, jumps, loads/stores, movhi/movpc, fence).
 - **M extension:** Implemented (`mul`, `mulh`, `mulhsu`, `mulhu`, `div`, `divu`, `rem`, `remu`).
-- **SYSTEM/CSR:** Implemented; delegation and mret/sret behavior tested.
+- **SYSTEM/CSR:** Implemented; delegation, mret/sret stacking, and basic interrupt injection tested.
 - **CSR counters:** `cycle`, `time`, `instret` implemented and tested.
 - **AMO:** Implemented **only** `amoswap.w`/`amoswap.d` (per v1 spec).
 - **CAP:** Base set implemented and covered by ops/fault tests.
-- **TENSOR:** Implemented all 9 instructions; basic tensor coverage for `tact`, `tcvt`, `tzero`, `tred`, `tscale`.
+- **TENSOR:** Implemented all 9 instructions; coverage includes format edge cases and INT8 saturation.
 - **Test status:** {test_status}
 
 ## Instruction Coverage (Spec vs Simulator)
@@ -41,7 +41,7 @@ REPORT_TEMPLATE = """# Spec vs Simulator Audit
 | Jumps | jal, jalr | ✅ Implemented | abi-test, abi-stack-test |
 | movhi/movpc | movhi, movpc | ✅ Implemented | trap-test (movhi), elf-layout-test |
 | fence | fence | ✅ Implemented (no timing model) | fence-test |
-| system | ecall, ebreak, mret, sret | ✅ Implemented | trap-test, system-ret-deleg-test |
+| system | ecall, ebreak, mret, sret | ✅ Implemented | trap-test, system-ret-deleg-test, system-ret-bits-test, interrupt-basic-test |
 
 ### M Extension
 
@@ -81,12 +81,12 @@ REPORT_TEMPLATE = """# Spec vs Simulator Audit
 
 | Instruction | Spec | Simulator | Tests |
 |---|---|---|---|
-| tld | ✅ | ✅ | tensor_test.bin, tensor-basic-test |
-| tst | ✅ | ✅ | tensor_test.bin |
-| tadd | ✅ | ✅ | tensor_test.bin (limited) |
+| tld | ✅ | ✅ | tensor_test.bin, tensor-basic-test, tensor-naninf-test, tensor-sat-test |
+| tst | ✅ | ✅ | tensor_test.bin, tensor-naninf-test, tensor-sat-test |
+| tadd | ✅ | ✅ | tensor_test.bin (limited), tensor-illegal-fmt-test (negative) |
 | tmma | ✅ | ✅ | tensor_test.bin (FP8) |
 | tact | ✅ | ✅ | tensor-basic-test |
-| tcvt | ✅ | ✅ | tensor-basic-test |
+| tcvt | ✅ | ✅ | tensor-basic-test, tensor-fmt-test, tensor-naninf-test, tensor-sat-test |
 | tzero | ✅ | ✅ | tensor-basic-test |
 | tred | ✅ | ✅ | tensor-basic-test |
 | tscale | ✅ | ✅ | tensor-basic-test |
@@ -115,20 +115,18 @@ REPORT_TEMPLATE = """# Spec vs Simulator Audit
 
 - **Core ISA:** hello, factorial-test, fib-test, reverse-test, palindrome-test, prime-test/prime-test2
 - **M extension:** mext-test
-- **Traps/illegal:** trap-test, illegal-shift-test, illegal-insn-test, misaligned-load-test, misaligned-store-test, system-ret-deleg-test
+- **Traps/illegal:** trap-test, illegal-shift-test, illegal-insn-test, misaligned-load-test, misaligned-store-test, system-ret-deleg-test, system-ret-bits-test, interrupt-basic-test
 - **AMO:** amo-test
 - **ABI:** abi-test, abi-stack-test
 - **ELF layout:** elf-layout-test
 - **CAP:** cap-test, cap-ops-test, cap-fault-perm-test, cap-fault-bounds-test, cap-fault-tag-test, cap-fault-sealed-test
-- **Tensor:** tensor_test.bin, tensor-basic-test, tensor-fmt-test, tensor-stride0-test
+- **Tensor:** tensor_test.bin, tensor-basic-test, tensor-fmt-test, tensor-stride0-test, tensor-naninf-test, tensor-sat-test, tensor-illegal-fmt-test
 - **CSR counters:** csr-counter-test, csr-sstatus-mask-test
 - **Fence:** fence-test
 
 ## Remaining Gaps / Recommended Next Actions
 
-1. **Tensor edge cases:** add tests for NaN/INF behavior, saturation, and illegal format combos.
-2. **System:** add explicit `sret`/`mret` state bit tests (MIE/SIE stacking) beyond current control-flow checks.
-3. **Interrupt modeling:** add basic interrupt injection coverage (mie/mip paths).
+No remaining gaps identified at this time.
 
 ---
 

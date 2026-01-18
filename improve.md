@@ -7,32 +7,27 @@
 - Implement all instructions defined in the ISA spec in the simulator.
 - Add tests to validate each instruction’s behavior in the simulator.
 
-### M1 — Minimal ABI + Syscall Spec (docs + tests)
-- Define calling convention (arg/ret regs, caller/callee-saved, stack alignment).
-- Document syscall numbers and semantics (read/write/exit, errors).
-- Update docs and add at least 2 ABI-focused tests (call/ret, stack usage).
-
-**Status:** Done (ABI/syscall spec updated; tests: `abi-test`, `abi-stack-test`).
-
-### M2 — ELF Layout Control in Assembler
-- Add options for text/data base addresses and segment alignment.
-- Support simple linker-script-like directives (e.g., `.text`, `.data`, `.bss`, `.section`).
-- Emit ELF with separate segments and correct entry point.
-- Add tests that verify address placement and entry behavior.
-
-**Status:** Done (layout options, section directives, multi-segment ELF, `elf-layout-test`).
-
-### M3 — Expanded ISA/Test Coverage
-- Add negative tests for illegal insns, misaligned accesses, cap violations.
-- Add CSR edge tests (read-only, masking, delegated traps).
-- Add tensor tests for boundary formats and stride edge cases.
-
-**Status:** Done (new tests: illegal opcode, misaligned load/store, cap tag/sealed faults, sstatus mask, tensor fmt + stride).
-
 ### M4 — Quality & Tooling
 - Improve assembler diagnostics (line/col, context, suggestions).
 - Add CI target to run `make check`.
 - Add README sections for ABI/syscall and test matrix.
+
+### M5 — Tensor Edge-Case Tests
+- Add tests for NaN/INF behavior.
+- Add tests for saturation behavior.
+- Add tests for illegal format combinations.
+
+**Status:** Done (tests: `tensor-naninf-test`, `tensor-sat-test`, `tensor-illegal-fmt-test`).
+
+### M6 — System State-Transition Tests
+- Add explicit `sret`/`mret` state bit tests (MIE/SIE stacking).
+
+**Status:** Done (test: `system-ret-bits-test`).
+
+### M7 — Interrupt Modeling Coverage
+- Add basic interrupt injection coverage (`mie`/`mip` paths).
+
+**Status:** Done (test: `interrupt-basic-test`).
 
 ## Implementation Guidelines
 

@@ -678,6 +678,13 @@ static void cap_decode(CapReg *c, const uint8_t in[16], bool tag) {
     c->sealed = false;
 }
 
+static int lowest_set_bit(uint64_t v) {
+    for (int i = 0; i < 64; i++) {
+        if (v & (1ull << i)) return i;
+    }
+    return -1;
+}
+
 Trap cpu_step(Cpu *c, Mem *m) {
     c->regs[0] = 0;
     if (c->pc & 0x3) {
@@ -690,6 +697,27 @@ Trap cpu_step(Cpu *c, Mem *m) {
         if (!cap_check(c->caps[31], c->pc, 4, 0x4, &sub)) {
             trap_entry(c, 11, sub, false);
             return TRAP_NONE;
+        }
+    }
+
+    uint64_t pending = c->mip & c->mie;
+    if (pending) {
+        int cause = lowest_set_bit(pending);
+        bool delegated = (c->mode != MODE_M) && (c->mideleg & (1ull << cause));
+        if (delegated) {
+            if (c->mstatus & MSTATUS_SIE) {
+                c->mip &= ~(1ull << cause);
+                c->sip &= ~(1ull << cause);
+                trap_entry(c, (uint64_t)cause, 0, true);
+                return TRAP_NONE;
+            }
+        } else {
+            if (c->mstatus & MSTATUS_MIE) {
+                c->mip &= ~(1ull << cause);
+                c->sip &= ~(1ull << cause);
+                trap_entry(c, (uint64_t)cause, 0, true);
+                return TRAP_NONE;
+            }
         }
     }
 
@@ -1086,10 +1114,14 @@ Trap cpu_step(Cpu *c, Mem *m) {
 
             bool rtype = (rs1 < 8) && (rs2 < 8);
             if (rtype && f3 == 0x0 && f7 == 0x00) { // tadd
-                Trap t = tensor_tadd(c, trd, trs1, trs2); if (t != TRAP_NONE) return t; break;
+                Trap t = tensor_tadd(c, trd, trs1, trs2);
+                if (t != TRAP_NONE) { trap_entry(c, 2, insn, false); return TRAP_NONE; }
+                break;
             }
             if (rtype && f3 == 0x1 && f7 == 0x01) { // tmma
-                Trap t = tensor_tmma(c, trd, trs1, trs2); if (t != TRAP_NONE) return t; break;
+                Trap t = tensor_tmma(c, trd, trs1, trs2);
+                if (t != TRAP_NONE) { trap_entry(c, 2, insn, false); return TRAP_NONE; }
+                break;
             }
 
             if (f3 == 0x0) { // tld
@@ -1099,7 +1131,11 @@ Trap cpu_step(Cpu *c, Mem *m) {
                     uint64_t sub = 0;
                     if (!cap_check(c->caps[0], base, 16, 0x1, &sub)) { trap_entry(c, 11, sub, false); return TRAP_NONE; }
                 }
-                Trap t = tensor_tld(c, m, trd, base, stride); if (t != TRAP_NONE) return t; break;
+                Trap t = tensor_tld(c, m, trd, base, stride);
+                if (t == TRAP_LOAD_MISALIGNED) { trap_entry(c, 4, base, false); return TRAP_NONE; }
+                if (t == TRAP_LOAD_FAULT) { trap_entry(c, 5, base, false); return TRAP_NONE; }
+                if (t != TRAP_NONE) { trap_entry(c, 2, insn, false); return TRAP_NONE; }
+                break;
             }
             if (f3 == 0x1) { // tst
                 int64_t stride = imm_i(insn);
@@ -1108,16 +1144,24 @@ Trap cpu_step(Cpu *c, Mem *m) {
                     uint64_t sub = 0;
                     if (!cap_check(c->caps[0], base, 16, 0x2, &sub)) { trap_entry(c, 11, sub, false); return TRAP_NONE; }
                 }
-                Trap t = tensor_tst(c, m, trd, base, stride); if (t != TRAP_NONE) return t; break;
+                Trap t = tensor_tst(c, m, trd, base, stride);
+                if (t == TRAP_STORE_MISALIGNED) { trap_entry(c, 6, base, false); return TRAP_NONE; }
+                if (t == TRAP_STORE_FAULT) { trap_entry(c, 7, base, false); return TRAP_NONE; }
+                if (t != TRAP_NONE) { trap_entry(c, 2, insn, false); return TRAP_NONE; }
+                break;
             }
             if (f3 == 0x2) { // tact
                 if (rs1 != rd) { trap_entry(c, 2, insn, false); return TRAP_NONE; }
                 uint32_t imm = (uint32_t)imm_i(insn) & 0x7;
-                Trap t = tensor_tact(c, trd, imm); if (t != TRAP_NONE) return t; break;
+                Trap t = tensor_tact(c, trd, imm);
+                if (t != TRAP_NONE) { trap_entry(c, 2, insn, false); return TRAP_NONE; }
+                break;
             }
             if (f3 == 0x3) { // tcvt
                 uint32_t imm = (uint32_t)imm_i(insn) & 0xF;
-                Trap t = tensor_tcvt(c, trd, trs1, imm); if (t != TRAP_NONE) return t; break;
+                Trap t = tensor_tcvt(c, trd, trs1, imm);
+                if (t != TRAP_NONE) { trap_entry(c, 2, insn, false); return TRAP_NONE; }
+                break;
             }
             if (f3 == 0x4) { // tzero
                 if (rs1 != rd) { trap_entry(c, 2, insn, false); return TRAP_NONE; }
@@ -1126,10 +1170,14 @@ Trap cpu_step(Cpu *c, Mem *m) {
             }
             if (f3 == 0x5) { // tred
                 uint32_t imm = (uint32_t)imm_i(insn) & 0x3;
-                Trap t = tensor_tred(c, trs1, rd, imm); if (t != TRAP_NONE) return t; break;
+                Trap t = tensor_tred(c, trs1, rd, imm);
+                if (t != TRAP_NONE) { trap_entry(c, 2, insn, false); return TRAP_NONE; }
+                break;
             }
             if (f3 == 0x6) { // tscale
-                Trap t = tensor_tscale(c, trd, c->regs[rs1]); if (t != TRAP_NONE) return t; break;
+                Trap t = tensor_tscale(c, trd, c->regs[rs1]);
+                if (t != TRAP_NONE) { trap_entry(c, 2, insn, false); return TRAP_NONE; }
+                break;
             }
             trap_entry(c, 2, insn, false);
             return TRAP_NONE;
