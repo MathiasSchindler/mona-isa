@@ -2,32 +2,19 @@
 
 ## Milestones
 
-## Highest Priority (Immediate)
-
-- Implement all instructions defined in the ISA spec in the simulator.
-- Add tests to validate each instruction’s behavior in the simulator.
-
 ### M4 — Quality & Tooling
 - Improve assembler diagnostics (line/col, context, suggestions).
 - Add CI target to run `make check`.
 - Add README sections for ABI/syscall and test matrix.
 
-### M5 — Tensor Edge-Case Tests
-- Add tests for NaN/INF behavior.
-- Add tests for saturation behavior.
-- Add tests for illegal format combinations.
+### M8 — Optional Assembler Optimizations
+- Add a flag to enable peephole optimizations (e.g., remove redundant moves, fold movhi+addi where safe).
+- Add a flag to control optimization level (none/basic).
+- Add tests to ensure optimized output preserves behavior.
 
-**Status:** Done (tests: `tensor-naninf-test`, `tensor-sat-test`, `tensor-illegal-fmt-test`).
-
-### M6 — System State-Transition Tests
-- Add explicit `sret`/`mret` state bit tests (MIE/SIE stacking).
-
-**Status:** Done (test: `system-ret-bits-test`).
-
-### M7 — Interrupt Modeling Coverage
-- Add basic interrupt injection coverage (`mie`/`mip` paths).
-
-**Status:** Done (test: `interrupt-basic-test`).
+### M9 — C Toolchain Path
+- Document a recommended C cross-compiler flow (e.g., LLVM/Clang target triple, minimal runtime, linker script).
+- Add a tiny C "hello" or arithmetic test compiled to MINA as a validation target.
 
 ## Implementation Guidelines
 
