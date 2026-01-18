@@ -7,6 +7,7 @@ This document describes the software simulator for the MINA architecture: what i
 - Executes MINA base integer ISA (implemented subset) with arithmetic, logic, branches, jumps, loads/stores, and system ops.
 - Implements M-extension ops: `mul`, `mulh`, `mulhsu`, `mulhu`, `div`, `divu`, `rem`, `remu`.
 - Implements CSR subset for M/S-mode control and trap handling.
+- Implements CSR counters: `cycle`, `time`, `instret` (read-only).
 - Implements capability checks (tagged capabilities, bounds, permissions) and CAP instructions.
 - Implements tensor instructions and supported tensor formats.
 - Implements AMO `amoswap.w` and `amoswap.d`.

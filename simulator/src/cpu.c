@@ -89,6 +89,10 @@ enum {
     CSR_MCAUSE = 0x342,
     CSR_MTVAL = 0x343,
     CSR_MIP = 0x344,
+
+    CSR_CYCLE = 0xC00,
+    CSR_TIME = 0xC01,
+    CSR_INSTRET = 0xC02,
 };
 
 static inline void write_reg(Cpu *c, uint32_t rd, uint64_t val) {
@@ -154,7 +158,7 @@ static Trap syscall_handle(Cpu *c, Mem *m) {
         if (a0 != 1 && a0 != 2) { c->regs[10] = 0; return TRAP_NONE; }
         if (a2 == 0) { c->regs[10] = 0; return TRAP_NONE; }
         if (a2 > 4096) a2 = 4096;
-        if (c->mstatus & MSTATUS_CAP) {
+        if ((c->mstatus & MSTATUS_CAP) && c->mode != MODE_M) {
             uint64_t sub = 0;
             if (!cap_check(c->caps[0], a1, a2, 0x1, &sub)) { trap_entry(c, 11, sub, false); return TRAP_NONE; }
         }
@@ -171,7 +175,7 @@ static Trap syscall_handle(Cpu *c, Mem *m) {
         if (a0 != 0) { c->regs[10] = 0; return TRAP_NONE; }
         if (a2 == 0) { c->regs[10] = 0; return TRAP_NONE; }
         if (a2 > 4096) a2 = 4096;
-        if (c->mstatus & MSTATUS_CAP) {
+        if ((c->mstatus & MSTATUS_CAP) && c->mode != MODE_M) {
             uint64_t sub = 0;
             if (!cap_check(c->caps[0], a1, a2, 0x2, &sub)) { trap_entry(c, 11, sub, false); return TRAP_NONE; }
         }
@@ -392,6 +396,9 @@ static bool csr_read(Cpu *c, uint32_t csr, uint64_t *out) {
         case CSR_SEPC: *out = c->sepc; return true;
         case CSR_SCAUSE: *out = c->scause; return true;
         case CSR_STVAL: *out = c->stval; return true;
+        case CSR_CYCLE: *out = c->cycle; return true;
+        case CSR_TIME: *out = c->time; return true;
+        case CSR_INSTRET: *out = c->instret; return true;
         default: return false;
     }
 }
@@ -933,38 +940,40 @@ Trap cpu_step(Cpu *c, Mem *m) {
             break;
         case OP_SYSTEM: {
             uint32_t imm = get_bits(insn, 31, 20);
-            if (imm == 0x000) {
-                Trap t = syscall_handle(c, m);
-                if (t == TRAP_NONE) break;
-                if (t == TRAP_EBREAK) return TRAP_EBREAK;
-                uint64_t cause = (c->mode == MODE_U) ? 8 : (c->mode == MODE_S ? 9 : 10);
-                trap_entry(c, cause, 0, false);
-                return TRAP_NONE;
-            }
-            if (imm == 0x001) {
-                return TRAP_EBREAK;
-            }
-            if (imm == 0x302) { // mret
-                uint64_t mpp = (c->mstatus & MSTATUS_MPP_MASK) >> MSTATUS_MPP_SHIFT;
-                c->mode = (PrivMode)mpp;
-                c->mstatus = (c->mstatus & ~MSTATUS_MPP_MASK);
-                uint64_t mie = (c->mstatus & MSTATUS_MPIE) ? 1 : 0;
-                if (mie) c->mstatus |= MSTATUS_MIE; else c->mstatus &= ~MSTATUS_MIE;
-                c->mstatus |= MSTATUS_MPIE;
-                c->pc = c->mepc;
-                pc_next = c->pc;
-                break;
-            }
-            if (imm == 0x102) { // sret
-                uint64_t spp = (c->mstatus & MSTATUS_SPP) ? 1 : 0;
-                c->mode = spp ? MODE_S : MODE_U;
-                c->mstatus &= ~MSTATUS_SPP;
-                uint64_t sie = (c->mstatus & MSTATUS_SPIE) ? 1 : 0;
-                if (sie) c->mstatus |= MSTATUS_SIE; else c->mstatus &= ~MSTATUS_SIE;
-                c->mstatus |= MSTATUS_SPIE;
-                c->pc = c->sepc;
-                pc_next = c->pc;
-                break;
+            if (f3 == 0 && rd == 0 && rs1 == 0) {
+                if (imm == 0x000) {
+                    Trap t = syscall_handle(c, m);
+                    if (t == TRAP_NONE) break;
+                    if (t == TRAP_EBREAK) return TRAP_EBREAK;
+                    uint64_t cause = (c->mode == MODE_U) ? 8 : (c->mode == MODE_S ? 9 : 10);
+                    trap_entry(c, cause, 0, false);
+                    return TRAP_NONE;
+                }
+                if (imm == 0x001) {
+                    return TRAP_EBREAK;
+                }
+                if (imm == 0x302) { // mret
+                    uint64_t mpp = (c->mstatus & MSTATUS_MPP_MASK) >> MSTATUS_MPP_SHIFT;
+                    c->mode = (PrivMode)mpp;
+                    c->mstatus = (c->mstatus & ~MSTATUS_MPP_MASK);
+                    uint64_t mie = (c->mstatus & MSTATUS_MPIE) ? 1 : 0;
+                    if (mie) c->mstatus |= MSTATUS_MIE; else c->mstatus &= ~MSTATUS_MIE;
+                    c->mstatus |= MSTATUS_MPIE;
+                    c->pc = c->mepc;
+                    pc_next = c->pc;
+                    break;
+                }
+                if (imm == 0x102) { // sret
+                    uint64_t spp = (c->mstatus & MSTATUS_SPP) ? 1 : 0;
+                    c->mode = spp ? MODE_S : MODE_U;
+                    c->mstatus &= ~MSTATUS_SPP;
+                    uint64_t sie = (c->mstatus & MSTATUS_SPIE) ? 1 : 0;
+                    if (sie) c->mstatus |= MSTATUS_SIE; else c->mstatus &= ~MSTATUS_SIE;
+                    c->mstatus |= MSTATUS_SPIE;
+                    c->pc = c->sepc;
+                    pc_next = c->pc;
+                    break;
+                }
             }
             if (f3 >= 1 && f3 <= 3) {
                 uint32_t csr = get_bits(insn, 31, 20);
@@ -972,9 +981,14 @@ Trap cpu_step(Cpu *c, Mem *m) {
                 uint64_t old = 0;
                 if (!csr_read(c, csr, &old)) { trap_entry(c, 2, insn, false); return TRAP_NONE; }
                 uint64_t val = c->regs[rs1];
-                if (f3 == 1) csr_write(c, csr, val);
-                else if (f3 == 2) csr_write(c, csr, old | val);
-                else if (f3 == 3) csr_write(c, csr, old & ~val);
+                bool write_attempt = (f3 == 1) || (rs1 != 0);
+                bool write_ok = true;
+                if (write_attempt) {
+                    if (f3 == 1) write_ok = csr_write(c, csr, val);
+                    else if (f3 == 2) write_ok = csr_write(c, csr, old | val);
+                    else if (f3 == 3) write_ok = csr_write(c, csr, old & ~val);
+                    if (!write_ok) { trap_entry(c, 2, insn, false); return TRAP_NONE; }
+                }
                 write_reg(c, rd, old);
                 break;
             }
@@ -984,9 +998,14 @@ Trap cpu_step(Cpu *c, Mem *m) {
                 uint64_t old = 0;
                 if (!csr_read(c, csr, &old)) { trap_entry(c, 2, insn, false); return TRAP_NONE; }
                 uint64_t zimm = rs1 & 0x1F;
-                if (f3 == 5) csr_write(c, csr, zimm);
-                else if (f3 == 6) csr_write(c, csr, old | zimm);
-                else if (f3 == 7) csr_write(c, csr, old & ~zimm);
+                bool write_attempt = (f3 == 5) || (zimm != 0);
+                bool write_ok = true;
+                if (write_attempt) {
+                    if (f3 == 5) write_ok = csr_write(c, csr, zimm);
+                    else if (f3 == 6) write_ok = csr_write(c, csr, old | zimm);
+                    else if (f3 == 7) write_ok = csr_write(c, csr, old & ~zimm);
+                    if (!write_ok) { trap_entry(c, 2, insn, false); return TRAP_NONE; }
+                }
                 write_reg(c, rd, old);
                 break;
             }
@@ -995,25 +1014,7 @@ Trap cpu_step(Cpu *c, Mem *m) {
         }
         case OP_CAP: {
             if (!(c->mstatus & MSTATUS_CAP)) { trap_entry(c, 2, insn, false); return TRAP_NONE; }
-            if (f3 == 0x0) { // cld
-                uint64_t addr = c->regs[rs1] + (uint64_t)imm_i(insn);
-                uint64_t sub = 0;
-                if (!cap_check(c->caps[0], addr, 16, 0x1, &sub)) { trap_entry(c, 11, sub, false); return TRAP_NONE; }
-                uint8_t buf[16]; bool tag;
-                if (!mem_read_cap(m, addr, buf, &tag)) { trap_entry(c, 5, addr, false); return TRAP_NONE; }
-                cap_decode(&c->caps[rd], buf, tag);
-                break;
-            }
-            if (f3 == 0x1) { // cst
-                uint64_t addr = c->regs[rs1] + (uint64_t)imm_i(insn);
-                uint64_t sub = 0;
-                if (!cap_check(c->caps[0], addr, 16, 0x2, &sub)) { trap_entry(c, 11, sub, false); return TRAP_NONE; }
-                uint8_t buf[16];
-                cap_encode(&c->caps[rs2], buf);
-                if (!mem_write_cap(m, addr, buf, c->caps[rs2].tag)) { trap_entry(c, 7, addr, false); return TRAP_NONE; }
-                break;
-            }
-            if (f7 == 0x00) {
+            if (f7 == 0x00 && (f3 >= 0x2 || rs2 != 0)) {
                 switch (f3) {
                     case 0x0: { // csetbounds
                         CapReg src = c->caps[rs1];
@@ -1055,6 +1056,24 @@ Trap cpu_step(Cpu *c, Mem *m) {
                         trap_entry(c, 2, insn, false);
                         return TRAP_NONE;
                 }
+                break;
+            }
+            if (f3 == 0x0) { // cld
+                uint64_t addr = c->regs[rs1] + (uint64_t)imm_i(insn);
+                uint64_t sub = 0;
+                if (!cap_check(c->caps[0], addr, 16, 0x1, &sub)) { trap_entry(c, 11, sub, false); return TRAP_NONE; }
+                uint8_t buf[16]; bool tag;
+                if (!mem_read_cap(m, addr, buf, &tag)) { trap_entry(c, 5, addr, false); return TRAP_NONE; }
+                cap_decode(&c->caps[rd], buf, tag);
+                break;
+            }
+            if (f3 == 0x1) { // cst
+                uint64_t addr = c->regs[rs1] + (uint64_t)imm_i(insn);
+                uint64_t sub = 0;
+                if (!cap_check(c->caps[0], addr, 16, 0x2, &sub)) { trap_entry(c, 11, sub, false); return TRAP_NONE; }
+                uint8_t buf[16];
+                cap_encode(&c->caps[rd], buf);
+                if (!mem_write_cap(m, addr, buf, c->caps[rd].tag)) { trap_entry(c, 7, addr, false); return TRAP_NONE; }
                 break;
             }
             trap_entry(c, 2, insn, false);
@@ -1155,6 +1174,9 @@ Trap cpu_step(Cpu *c, Mem *m) {
 
     c->pc = pc_next;
     c->steps++;
+    c->cycle++;
+    c->instret++;
+    c->time = c->cycle;
 
     if (c->dump_regs) cpu_dump_regs(c);
 

@@ -61,6 +61,7 @@ typedef struct {
     // CSRs (subset)
     uint64_t mstatus, mie, medeleg, mideleg, mtvec, mip, mscratch, mepc, mcause, mtval;
     uint64_t sstatus, sie, stvec, sip, sscratch, sepc, scause, stval;
+    uint64_t cycle, time, instret;
 
     CapReg caps[32];
     TensorReg tregs[8];

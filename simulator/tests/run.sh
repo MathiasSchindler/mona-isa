@@ -34,11 +34,23 @@ cmp -s "$OUT/csr-test.out" "$ROOT/tests/expected/csr-test.txt"
 rm -f "$OUT/csr-test.out"
 echo "PASS csr-test"
 
+$AS "$ROOT/../mina-as/tests/src/csr-counter-test.s" -o "$OUT/csr-counter-test.elf"
+$SIM "$OUT/csr-counter-test.elf" > "$OUT/csr-counter-test.out" 2>/dev/null
+cmp -s "$OUT/csr-counter-test.out" "$ROOT/tests/expected/csr-counter-test.txt"
+rm -f "$OUT/csr-counter-test.out"
+echo "PASS csr-counter-test"
+
 $AS "$ROOT/../mina-as/tests/src/trap-test.s" -o "$OUT/trap-test.elf"
 $SIM "$OUT/trap-test.elf" > "$OUT/trap-test.out" 2>/dev/null
 cmp -s "$OUT/trap-test.out" "$ROOT/tests/expected/trap-test.txt"
 rm -f "$OUT/trap-test.out"
 echo "PASS trap-test"
+
+$AS "$ROOT/../mina-as/tests/src/system-ret-deleg-test.s" -o "$OUT/system-ret-deleg-test.elf"
+$SIM "$OUT/system-ret-deleg-test.elf" > "$OUT/system-ret-deleg-test.out" 2>/dev/null
+cmp -s "$OUT/system-ret-deleg-test.out" "$ROOT/tests/expected/system-ret-deleg-test.txt"
+rm -f "$OUT/system-ret-deleg-test.out"
+echo "PASS system-ret-deleg-test"
 
 $AS "$ROOT/../mina-as/tests/src/cap-test.s" -o "$OUT/cap-test.elf"
 $SIM "$OUT/cap-test.elf" > "$OUT/cap-test.out" 2>/dev/null
@@ -46,11 +58,35 @@ cmp -s "$OUT/cap-test.out" "$ROOT/tests/expected/cap-test.txt"
 rm -f "$OUT/cap-test.out"
 echo "PASS cap-test"
 
+$AS "$ROOT/../mina-as/tests/src/cap-ops-test.s" -o "$OUT/cap-ops-test.elf"
+$SIM "$OUT/cap-ops-test.elf" > "$OUT/cap-ops-test.out" 2>/dev/null
+cmp -s "$OUT/cap-ops-test.out" "$ROOT/tests/expected/cap-ops-test.txt"
+rm -f "$OUT/cap-ops-test.out"
+echo "PASS cap-ops-test"
+
+$AS "$ROOT/../mina-as/tests/src/cap-fault-perm-test.s" -o "$OUT/cap-fault-perm-test.elf"
+$SIM "$OUT/cap-fault-perm-test.elf" > "$OUT/cap-fault-perm-test.out" 2>/dev/null
+cmp -s "$OUT/cap-fault-perm-test.out" "$ROOT/tests/expected/cap-fault-perm-test.txt"
+rm -f "$OUT/cap-fault-perm-test.out"
+echo "PASS cap-fault-perm-test"
+
+$AS "$ROOT/../mina-as/tests/src/cap-fault-bounds-test.s" -o "$OUT/cap-fault-bounds-test.elf"
+$SIM "$OUT/cap-fault-bounds-test.elf" > "$OUT/cap-fault-bounds-test.out" 2>/dev/null
+cmp -s "$OUT/cap-fault-bounds-test.out" "$ROOT/tests/expected/cap-fault-bounds-test.txt"
+rm -f "$OUT/cap-fault-bounds-test.out"
+echo "PASS cap-fault-bounds-test"
+
 $AS "$ROOT/../mina-as/tests/src/syscall-io.s" -o "$OUT/syscall-io.elf"
 $SIM "$OUT/syscall-io.elf" > "$OUT/syscall-io.out" 2>/dev/null
 cmp -s "$OUT/syscall-io.out" "$ROOT/tests/expected/syscall-io.txt"
 rm -f "$OUT/syscall-io.out"
 echo "PASS syscall-io"
+
+$AS "$ROOT/../mina-as/tests/src/fence-test.s" -o "$OUT/fence-test.elf"
+$SIM "$OUT/fence-test.elf" > "$OUT/fence-test.out" 2>/dev/null
+cmp -s "$OUT/fence-test.out" "$ROOT/tests/expected/fence-test.txt"
+rm -f "$OUT/fence-test.out"
+echo "PASS fence-test"
 
 $AS "$ROOT/../mina-as/tests/src/factorial-test.s" -o "$OUT/factorial-test.elf"
 $SIM "$OUT/factorial-test.elf" > "$OUT/factorial-test.out" 2>/dev/null
@@ -99,6 +135,12 @@ $SIM "$OUT/palindrome-test.elf" > "$OUT/palindrome-test.out" 2>/dev/null
 cmp -s "$OUT/palindrome-test.out" "$ROOT/tests/expected/palindrome-test.txt"
 rm -f "$OUT/palindrome-test.out"
 echo "PASS palindrome-test"
+
+$AS "$ROOT/../mina-as/tests/src/tensor-basic-test.s" -o "$OUT/tensor-basic-test.elf"
+$SIM "$OUT/tensor-basic-test.elf" > "$OUT/tensor-basic-test.out" 2>/dev/null
+cmp -s "$OUT/tensor-basic-test.out" "$ROOT/tests/expected/tensor-basic-test.txt"
+rm -f "$OUT/tensor-basic-test.out"
+echo "PASS tensor-basic-test"
 
 $AS "$ROOT/../mina-as/tests/src/amo-test.s" -o "$OUT/amo-test.elf"
 $SIM "$OUT/amo-test.elf" > "$OUT/amo-test.out" 2>/dev/null
