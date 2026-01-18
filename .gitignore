@@ -1,0 +1,12 @@
+# Build outputs
+/dist/
+.venv/
+
+# OS files
+.DS_Store
+
+# Build artifacts
+mina-as/mina-as
+simulator/mina-sim
+simulator/hello.elf
+simulator/tests/out/
