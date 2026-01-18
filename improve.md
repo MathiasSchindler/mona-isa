@@ -27,6 +27,8 @@
 - Add CSR edge tests (read-only, masking, delegated traps).
 - Add tensor tests for boundary formats and stride edge cases.
 
+**Status:** Done (new tests: illegal opcode, misaligned load/store, cap tag/sealed faults, sstatus mask, tensor fmt + stride).
+
 ### M4 — Quality & Tooling
 - Improve assembler diagnostics (line/col, context, suggestions).
 - Add CI target to run `make check`.

@@ -40,6 +40,12 @@ cmp -s "$OUT/csr-counter-test.out" "$ROOT/tests/expected/csr-counter-test.txt"
 rm -f "$OUT/csr-counter-test.out"
 echo "PASS csr-counter-test"
 
+$AS "$ROOT/../mina-as/tests/src/csr-sstatus-mask-test.s" -o "$OUT/csr-sstatus-mask-test.elf"
+$SIM "$OUT/csr-sstatus-mask-test.elf" > "$OUT/csr-sstatus-mask-test.out" 2>/dev/null
+cmp -s "$OUT/csr-sstatus-mask-test.out" "$ROOT/tests/expected/csr-sstatus-mask-test.txt"
+rm -f "$OUT/csr-sstatus-mask-test.out"
+echo "PASS csr-sstatus-mask-test"
+
 $AS "$ROOT/../mina-as/tests/src/trap-test.s" -o "$OUT/trap-test.elf"
 $SIM "$OUT/trap-test.elf" > "$OUT/trap-test.out" 2>/dev/null
 cmp -s "$OUT/trap-test.out" "$ROOT/tests/expected/trap-test.txt"
@@ -75,6 +81,18 @@ $SIM "$OUT/cap-fault-bounds-test.elf" > "$OUT/cap-fault-bounds-test.out" 2>/dev/
 cmp -s "$OUT/cap-fault-bounds-test.out" "$ROOT/tests/expected/cap-fault-bounds-test.txt"
 rm -f "$OUT/cap-fault-bounds-test.out"
 echo "PASS cap-fault-bounds-test"
+
+$AS "$ROOT/../mina-as/tests/src/cap-fault-tag-test.s" -o "$OUT/cap-fault-tag-test.elf"
+$SIM "$OUT/cap-fault-tag-test.elf" > "$OUT/cap-fault-tag-test.out" 2>/dev/null
+cmp -s "$OUT/cap-fault-tag-test.out" "$ROOT/tests/expected/cap-fault-tag-test.txt"
+rm -f "$OUT/cap-fault-tag-test.out"
+echo "PASS cap-fault-tag-test"
+
+$AS "$ROOT/../mina-as/tests/src/cap-fault-sealed-test.s" -o "$OUT/cap-fault-sealed-test.elf"
+$SIM "$OUT/cap-fault-sealed-test.elf" > "$OUT/cap-fault-sealed-test.out" 2>/dev/null
+cmp -s "$OUT/cap-fault-sealed-test.out" "$ROOT/tests/expected/cap-fault-sealed-test.txt"
+rm -f "$OUT/cap-fault-sealed-test.out"
+echo "PASS cap-fault-sealed-test"
 
 $AS "$ROOT/../mina-as/tests/src/syscall-io.s" -o "$OUT/syscall-io.elf"
 $SIM "$OUT/syscall-io.elf" > "$OUT/syscall-io.out" 2>/dev/null
@@ -124,6 +142,24 @@ cmp -s "$OUT/illegal-shift-test.out" "$ROOT/tests/expected/illegal-shift-test.tx
 rm -f "$OUT/illegal-shift-test.out"
 echo "PASS illegal-shift-test"
 
+$AS "$ROOT/../mina-as/tests/src/illegal-insn-test.s" -o "$OUT/illegal-insn-test.elf"
+$SIM "$OUT/illegal-insn-test.elf" > "$OUT/illegal-insn-test.out" 2>/dev/null
+cmp -s "$OUT/illegal-insn-test.out" "$ROOT/tests/expected/illegal-insn-test.txt"
+rm -f "$OUT/illegal-insn-test.out"
+echo "PASS illegal-insn-test"
+
+$AS "$ROOT/../mina-as/tests/src/misaligned-load-test.s" -o "$OUT/misaligned-load-test.elf"
+$SIM "$OUT/misaligned-load-test.elf" > "$OUT/misaligned-load-test.out" 2>/dev/null
+cmp -s "$OUT/misaligned-load-test.out" "$ROOT/tests/expected/misaligned-load-test.txt"
+rm -f "$OUT/misaligned-load-test.out"
+echo "PASS misaligned-load-test"
+
+$AS "$ROOT/../mina-as/tests/src/misaligned-store-test.s" -o "$OUT/misaligned-store-test.elf"
+$SIM "$OUT/misaligned-store-test.elf" > "$OUT/misaligned-store-test.out" 2>/dev/null
+cmp -s "$OUT/misaligned-store-test.out" "$ROOT/tests/expected/misaligned-store-test.txt"
+rm -f "$OUT/misaligned-store-test.out"
+echo "PASS misaligned-store-test"
+
 $AS "$ROOT/../mina-as/tests/src/reverse-test.s" -o "$OUT/reverse-test.elf"
 $SIM "$OUT/reverse-test.elf" > "$OUT/reverse-test.out" 2>/dev/null
 cmp -s "$OUT/reverse-test.out" "$ROOT/tests/expected/reverse-test.txt"
@@ -141,6 +177,18 @@ $SIM "$OUT/tensor-basic-test.elf" > "$OUT/tensor-basic-test.out" 2>/dev/null
 cmp -s "$OUT/tensor-basic-test.out" "$ROOT/tests/expected/tensor-basic-test.txt"
 rm -f "$OUT/tensor-basic-test.out"
 echo "PASS tensor-basic-test"
+
+$AS "$ROOT/../mina-as/tests/src/tensor-fmt-test.s" -o "$OUT/tensor-fmt-test.elf"
+$SIM "$OUT/tensor-fmt-test.elf" > "$OUT/tensor-fmt-test.out" 2>/dev/null
+cmp -s "$OUT/tensor-fmt-test.out" "$ROOT/tests/expected/tensor-fmt-test.txt"
+rm -f "$OUT/tensor-fmt-test.out"
+echo "PASS tensor-fmt-test"
+
+$AS "$ROOT/../mina-as/tests/src/tensor-stride0-test.s" -o "$OUT/tensor-stride0-test.elf"
+$SIM "$OUT/tensor-stride0-test.elf" > "$OUT/tensor-stride0-test.out" 2>/dev/null
+cmp -s "$OUT/tensor-stride0-test.out" "$ROOT/tests/expected/tensor-stride0-test.txt"
+rm -f "$OUT/tensor-stride0-test.out"
+echo "PASS tensor-stride0-test"
 
 $AS "$ROOT/../mina-as/tests/src/amo-test.s" -o "$OUT/amo-test.elf"
 $SIM "$OUT/amo-test.elf" > "$OUT/amo-test.out" 2>/dev/null

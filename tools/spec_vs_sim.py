@@ -115,20 +115,20 @@ REPORT_TEMPLATE = """# Spec vs Simulator Audit
 
 - **Core ISA:** hello, factorial-test, fib-test, reverse-test, palindrome-test, prime-test/prime-test2
 - **M extension:** mext-test
-- **Traps/illegal:** trap-test, illegal-shift-test, system-ret-deleg-test
+- **Traps/illegal:** trap-test, illegal-shift-test, illegal-insn-test, misaligned-load-test, misaligned-store-test, system-ret-deleg-test
 - **AMO:** amo-test
 - **ABI:** abi-test, abi-stack-test
 - **ELF layout:** elf-layout-test
-- **CAP:** cap-test, cap-ops-test, cap-fault-perm-test, cap-fault-bounds-test
-- **Tensor:** tensor_test.bin, tensor-basic-test
-- **CSR counters:** csr-counter-test
+- **CAP:** cap-test, cap-ops-test, cap-fault-perm-test, cap-fault-bounds-test, cap-fault-tag-test, cap-fault-sealed-test
+- **Tensor:** tensor_test.bin, tensor-basic-test, tensor-fmt-test, tensor-stride0-test
+- **CSR counters:** csr-counter-test, csr-sstatus-mask-test
 - **Fence:** fence-test
 
 ## Remaining Gaps / Recommended Next Actions
 
-1. **Tensor edge cases:** add tests for NaN/INF behavior, saturation, misalignment, and illegal format combos.
-2. **CAP faults:** add tests for sealed usage and tag faults (subcodes 0x3, 0x4).
-3. **System:** add explicit `sret`/`mret` state bit tests (MIE/SIE stacking) beyond current control-flow checks.
+1. **Tensor edge cases:** add tests for NaN/INF behavior, saturation, and illegal format combos.
+2. **System:** add explicit `sret`/`mret` state bit tests (MIE/SIE stacking) beyond current control-flow checks.
+3. **Interrupt modeling:** add basic interrupt injection coverage (mie/mip paths).
 
 ---
 
