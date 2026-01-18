@@ -70,6 +70,12 @@ cmp -s "$OUT/prime-test.out" "$ROOT/tests/expected/prime-test.txt"
 rm -f "$OUT/prime-test.out"
 echo "PASS prime-test"
 
+$AS "$ROOT/../mina-as/tests/src/prime-test2.s" -o "$OUT/prime-test2.elf"
+$SIM "$OUT/prime-test2.elf" > "$OUT/prime-test2.out" 2>/dev/null
+cmp -s "$OUT/prime-test2.out" "$ROOT/tests/expected/prime-test2.txt"
+rm -f "$OUT/prime-test2.out"
+echo "PASS prime-test2"
+
 $AS "$ROOT/../mina-as/tests/src/reverse-test.s" -o "$OUT/reverse-test.elf"
 $SIM "$OUT/reverse-test.elf" > "$OUT/reverse-test.out" 2>/dev/null
 cmp -s "$OUT/reverse-test.out" "$ROOT/tests/expected/reverse-test.txt"

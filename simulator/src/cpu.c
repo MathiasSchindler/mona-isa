@@ -712,8 +712,54 @@ Trap cpu_step(Cpu *c, Mem *m) {
             uint64_t b = c->regs[rs2];
             uint64_t res = 0;
             if (f7 == 0x01) {
-                if (f3 == 0x0) res = (uint64_t)((int64_t)a * (int64_t)b);
-                else { trap_entry(c, 2, insn, false); return TRAP_NONE; }
+                switch (f3) {
+                    case 0x0: // mul
+                        res = (uint64_t)((int64_t)a * (int64_t)b);
+                        break;
+                    case 0x1: { // mulh
+                        __int128 prod = (__int128)(int64_t)a * (__int128)(int64_t)b;
+                        res = (uint64_t)((prod >> 64) & 0xFFFFFFFFFFFFFFFFull);
+                        break;
+                    }
+                    case 0x2: { // mulhsu
+                        __int128 prod = (__int128)(int64_t)a * (__int128)(uint64_t)b;
+                        res = (uint64_t)((prod >> 64) & 0xFFFFFFFFFFFFFFFFull);
+                        break;
+                    }
+                    case 0x3: { // mulhu
+                        unsigned __int128 prod = (unsigned __int128)a * (unsigned __int128)b;
+                        res = (uint64_t)(prod >> 64);
+                        break;
+                    }
+                    case 0x4: { // div
+                        int64_t sa = (int64_t)a;
+                        int64_t sb = (int64_t)b;
+                        if (sb == 0) res = UINT64_MAX;
+                        else if (sa == INT64_MIN && sb == -1) res = (uint64_t)INT64_MIN;
+                        else res = (uint64_t)(sa / sb);
+                        break;
+                    }
+                    case 0x5: { // divu
+                        if (b == 0) res = UINT64_MAX;
+                        else res = a / b;
+                        break;
+                    }
+                    case 0x6: { // rem
+                        int64_t sa = (int64_t)a;
+                        int64_t sb = (int64_t)b;
+                        if (sb == 0) res = a;
+                        else if (sa == INT64_MIN && sb == -1) res = 0;
+                        else res = (uint64_t)(sa % sb);
+                        break;
+                    }
+                    case 0x7: { // remu
+                        if (b == 0) res = a;
+                        else res = a % b;
+                        break;
+                    }
+                    default:
+                        trap_entry(c, 2, insn, false); return TRAP_NONE;
+                }
             } else {
                 switch (f3) {
                     case 0x0: res = (f7 == 0x20) ? (a - b) : (a + b); break;

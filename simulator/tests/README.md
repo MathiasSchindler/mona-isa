@@ -38,6 +38,7 @@ Current self-checking tests:
 - factorial-test (loop + multiply)
 - fib-test (loop)
 - prime-test (trial division)
+- prime-test2 (efficient trial division)
 - reverse-test (string reverse)
 - palindrome-test (string compare)
 - amo-test (amoswap.w/d atomics)
