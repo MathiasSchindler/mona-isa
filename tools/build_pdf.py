@@ -24,6 +24,8 @@ OUTPUT_PDF = DIST_DIR / "MINA-Combined.pdf"
 PLAN_MD = ROOT / "plan.md"
 DELIVERABLES_DIR = ROOT / "deliverables"
 
+SPEC_VS_SIM_GLOB = "spec-vs-sim-*.md"
+
 
 def _read_version_line() -> str:
     if not PLAN_MD.exists():
@@ -35,10 +37,24 @@ def _read_version_line() -> str:
     return "Version unknown"
 
 
+def _latest_spec_vs_sim() -> Path | None:
+    if not DIST_DIR.exists():
+        return None
+    candidates = list(DIST_DIR.glob(SPEC_VS_SIM_GLOB))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda p: p.stat().st_mtime)
+
+
 def _collect_sources() -> list[Path]:
     sources = [PLAN_MD]
     if DELIVERABLES_DIR.exists():
         sources += sorted(DELIVERABLES_DIR.glob("*.md"))
+
+    latest_report = _latest_spec_vs_sim()
+    if latest_report:
+        sources.append(latest_report)
+
     return [p for p in sources if p.exists()]
 
 
@@ -112,10 +128,18 @@ def _build_combined_markdown(sources: list[Path]) -> str:
     body: list[str] = []
     for path in sources:
         title = path.relative_to(ROOT).as_posix()
+        if path.match(str(DIST_DIR / SPEC_VS_SIM_GLOB)):
+            title = f"Annex: {title}"
         body.extend([f"\n\n---\n\n# {title}\n"])
-        body.append(path.read_text(encoding="utf-8").rstrip())
+        content = path.read_text(encoding="utf-8").rstrip()
+        body.append(_sanitize_for_pdf(content))
 
     return "\n".join(header + body) + "\n"
+
+
+def _sanitize_for_pdf(text: str) -> str:
+    # Replace emoji not supported by default LaTeX fonts.
+    return text.replace("✅", "OK")
 
 
 def main() -> None:
