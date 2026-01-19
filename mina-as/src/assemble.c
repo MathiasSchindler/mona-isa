@@ -2,6 +2,27 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+static int is_section_directive(char *tokens[], int count, SectionKind *out) {
+    if (count == 0 || tokens[0][0] != '.') return 0;
+    if (strcmp(tokens[0], ".text") == 0) { *out = SEC_TEXT; return 1; }
+    if (strcmp(tokens[0], ".data") == 0) { *out = SEC_DATA; return 1; }
+    if (strcmp(tokens[0], ".bss") == 0) { *out = SEC_BSS; return 1; }
+    if (strcmp(tokens[0], ".section") == 0 && count >= 2 && section_from_name(tokens[1], out)) return 1;
+    return 0;
+}
+
+static int is_unconditional_jump(char *tokens[], int count) {
+    if (count == 0) return 0;
+    const char *op = tokens[0];
+    if (strcmp(op, "j") == 0 || strcmp(op, "jr") == 0 || strcmp(op, "ret") == 0) return 1;
+    if (strcmp(op, "jal") == 0 && count >= 3) {
+        return parse_reg(tokens[1]) == 0;
+    }
+    if (strcmp(op, "jalr") == 0 && count >= 4) {
+        return parse_reg(tokens[1]) == 0;
+    }
+    return 0;
+}
 
 int emit_directive(Section *sec, SectionKind kind, char *tokens[], int count) {
     if (count == 0) return 1;
@@ -361,6 +382,7 @@ int first_pass(FILE *f, LabelTable *labels, const AsmOptions *opt) {
     char line[MAX_LINE];
     SectionKind cur = SEC_TEXT;
     uint64_t text_pc = 0, data_pc = 0, bss_pc = 0;
+    bool skip_unreachable = false;
     while (fgets(line, sizeof(line), f)) {
         strip_comment(line);
         char *tokens[MAX_TOKENS];
@@ -373,16 +395,22 @@ int first_pass(FILE *f, LabelTable *labels, const AsmOptions *opt) {
             label_add(labels, tokens[0], base + pc);
             for (int i = 1; i < count; i++) tokens[i - 1] = tokens[i];
             count--;
-            if (count == 0) continue;
+            if (count == 0) { skip_unreachable = false; continue; }
+            skip_unreachable = false;
+        }
+
+        SectionKind next;
+        if (is_section_directive(tokens, count, &next)) {
+            cur = next;
+            if (cur != SEC_TEXT) skip_unreachable = false;
+            continue;
+        }
+
+        if (opt->optimize && cur == SEC_TEXT && skip_unreachable && tokens[0][0] != '.') {
+            continue;
         }
 
         if (tokens[0][0] == '.') {
-            SectionKind next;
-            if (strcmp(tokens[0], ".text") == 0) { cur = SEC_TEXT; continue; }
-            if (strcmp(tokens[0], ".data") == 0) { cur = SEC_DATA; continue; }
-            if (strcmp(tokens[0], ".bss") == 0) { cur = SEC_BSS; continue; }
-            if (strcmp(tokens[0], ".section") == 0 && count >= 2 && section_from_name(tokens[1], &next)) { cur = next; continue; }
-
             uint64_t *pc = (cur == SEC_TEXT) ? &text_pc : (cur == SEC_DATA ? &data_pc : &bss_pc);
             uint64_t base = (cur == SEC_TEXT) ? opt->text_base : (cur == SEC_DATA ? opt->data_base : opt->bss_base);
 
@@ -419,6 +447,9 @@ int first_pass(FILE *f, LabelTable *labels, const AsmOptions *opt) {
             } else {
                 text_pc += 4;
             }
+            if (opt->optimize && is_unconditional_jump(tokens, count)) {
+                skip_unreachable = true;
+            }
         }
     }
     return 1;
@@ -442,6 +473,7 @@ int assemble_file(const char *in_path, const char *out_path, bool elf_output, co
     SectionKind cur = SEC_TEXT;
     char line[MAX_LINE];
     int ok = 1;
+    bool skip_unreachable = false;
     while (fgets(line, sizeof(line), f)) {
         strip_comment(line);
         char *tokens[MAX_TOKENS];
@@ -451,14 +483,19 @@ int assemble_file(const char *in_path, const char *out_path, bool elf_output, co
             tokens[0][strlen(tokens[0]) - 1] = '\0';
             for (int i = 1; i < count; i++) tokens[i - 1] = tokens[i];
             count--;
-            if (count == 0) continue;
+            if (count == 0) { skip_unreachable = false; continue; }
+            skip_unreachable = false;
         }
-        if (tokens[0][0] == '.') {
-            SectionKind next;
-            if (strcmp(tokens[0], ".text") == 0) { cur = SEC_TEXT; continue; }
-            if (strcmp(tokens[0], ".data") == 0) { cur = SEC_DATA; continue; }
-            if (strcmp(tokens[0], ".bss") == 0) { cur = SEC_BSS; continue; }
-            if (strcmp(tokens[0], ".section") == 0 && count >= 2 && section_from_name(tokens[1], &next)) { cur = next; continue; }
+
+        SectionKind next;
+        if (is_section_directive(tokens, count, &next)) {
+            cur = next;
+            if (cur != SEC_TEXT) skip_unreachable = false;
+            continue;
+        }
+
+        if (opt->optimize && cur == SEC_TEXT && skip_unreachable && tokens[0][0] != '.') {
+            continue;
         }
 
         Section *sec = (cur == SEC_TEXT) ? &text : (cur == SEC_DATA ? &data : &bss);
@@ -468,10 +505,17 @@ int assemble_file(const char *in_path, const char *out_path, bool elf_output, co
             ok = 0;
             break;
         }
+        if (opt->optimize && cur == SEC_TEXT && is_unconditional_jump(tokens, count)) {
+            skip_unreachable = true;
+        }
     }
     fclose(f);
 
     if (!ok) { free(text.buf.data); free(data.buf.data); return 0; }
+
+    if (opt->optimize) {
+        optimize_text_section(&text);
+    }
 
     if (!elf_output && (data.buf.size > 0 || bss.pc > 0 || opt->data_base != opt->text_base || opt->bss_base != opt->text_base)) {
         free(text.buf.data); free(data.buf.data); return 0;

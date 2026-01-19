@@ -43,6 +43,7 @@ typedef struct {
     uint64_t data_base;
     uint64_t bss_base;
     uint64_t seg_align;
+    bool optimize;
 } AsmOptions;
 
 void buf_init(Buffer *b);
@@ -84,6 +85,8 @@ int emit_directive(Section *sec, SectionKind kind, char *tokens[], int count);
 int assemble_line(Section *sec, SectionKind kind, char *tokens[], int count, const LabelTable *labels);
 int first_pass(FILE *f, LabelTable *labels, const AsmOptions *opt);
 int assemble_file(const char *in_path, const char *out_path, bool elf_output, const AsmOptions *opt);
+
+void optimize_text_section(Section *text);
 
 uint32_t csr_addr_from_name(const char *s);
 uint32_t tensor_func_from_name(const char *s);

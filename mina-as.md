@@ -18,10 +18,14 @@ This document proposes milestones for introducing optional optimization in `mina
 - Keep a thin `main.c` that orchestrates the pipeline.
 - Add unit tests for tokenization and parsing edge cases.
 
+**Status:** Done (split into buffer/lexer/parse/encode/elf/assemble/util modules).
+
 ### A2 — Optimization Pipeline Skeleton
 - Introduce a pre-emit optimization pass stage over a simple IR.
 - Add a single `-O`/`--optimize` flag (on/off). Default is off.
 - Ensure `-O0` (or no flag) reproduces current output byte-for-byte for existing tests.
+
+**Status:** Done (no-op optimizer pass wired behind `-O/--optimize`).
 
 ### A3 — Basic Peephole Optimizations
 - Remove redundant moves (`addi rd, rs, 0` where safe).
@@ -29,10 +33,14 @@ This document proposes milestones for introducing optional optimization in `mina
 - Simplify dead writes to `r0`.
 - Add golden tests showing identical behavior and smaller code size.
 
+**Status:** Done (peephole pass for redundant moves and movhi+addi with zero low bits; tests now run with and without `-O`).
+
 ### A4 — Control-Flow-Safe Cleanup
 - Eliminate unreachable instruction sequences after unconditional jumps.
 - Merge consecutive label targets where safe (no intervening alignment directives).
 - Add tests that include labels, branches, and mixed directives.
+
+**Status:** Partially done (unreachable instruction removal after unconditional jumps; label-merge and A4-specific tests pending).
 
 ### A5 — Scheduling-Aware (Optional)
 - Provide a no-op placeholder pass for future scheduling.

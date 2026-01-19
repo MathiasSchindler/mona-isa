@@ -16,232 +16,108 @@ if [ ! -x "$AS" ]; then
   make -s -C "$ROOT/../mina-as"
 fi
 
-$AS "$ROOT/../mina-as/tests/src/hello.s" -o "$OUT/hello.elf"
-$SIM "$OUT/hello.elf" > "$OUT/hello.out" 2>/dev/null
-cmp -s "$OUT/hello.out" "$ROOT/tests/expected/hello.txt"
-rm -f "$OUT/hello.out"
-echo "PASS hello"
+run_test() {
+  name="$1"
+  src="$2"
+  expected="$3"
+  input="$4"
+  shift 4
+  extra_args="$@"
 
-$AS "$ROOT/../mina-as/tests/src/uart-echo.s" -o "$OUT/uart-echo.elf"
-printf 'X' | $SIM "$OUT/uart-echo.elf" > "$OUT/uart-echo.out" 2>/dev/null
-cmp -s "$OUT/uart-echo.out" "$ROOT/tests/expected/uart-echo.txt"
-rm -f "$OUT/uart-echo.out"
-echo "PASS uart-echo"
+  for opt in "" "-O"; do
+    suffix=""
+    if [ -n "$opt" ]; then suffix="-opt"; fi
+    elf="$OUT/${name}${suffix}.elf"
+    out="$OUT/${name}${suffix}.out"
 
-$AS "$ROOT/../mina-as/tests/src/csr-test.s" -o "$OUT/csr-test.elf"
-$SIM "$OUT/csr-test.elf" > "$OUT/csr-test.out" 2>/dev/null
-cmp -s "$OUT/csr-test.out" "$ROOT/tests/expected/csr-test.txt"
-rm -f "$OUT/csr-test.out"
-echo "PASS csr-test"
+    $AS $opt $extra_args "$src" -o "$elf"
+    if [ -n "$input" ]; then
+      printf "%s" "$input" | $SIM "$elf" > "$out" 2>/dev/null
+    else
+      $SIM "$elf" > "$out" 2>/dev/null
+    fi
+    cmp -s "$out" "$expected"
+    rm -f "$out"
+  done
 
-$AS "$ROOT/../mina-as/tests/src/csr-counter-test.s" -o "$OUT/csr-counter-test.elf"
-$SIM "$OUT/csr-counter-test.elf" > "$OUT/csr-counter-test.out" 2>/dev/null
-cmp -s "$OUT/csr-counter-test.out" "$ROOT/tests/expected/csr-counter-test.txt"
-rm -f "$OUT/csr-counter-test.out"
-echo "PASS csr-counter-test"
+  echo "PASS $name"
+}
 
-$AS "$ROOT/../mina-as/tests/src/csr-sstatus-mask-test.s" -o "$OUT/csr-sstatus-mask-test.elf"
-$SIM "$OUT/csr-sstatus-mask-test.elf" > "$OUT/csr-sstatus-mask-test.out" 2>/dev/null
-cmp -s "$OUT/csr-sstatus-mask-test.out" "$ROOT/tests/expected/csr-sstatus-mask-test.txt"
-rm -f "$OUT/csr-sstatus-mask-test.out"
-echo "PASS csr-sstatus-mask-test"
+run_test "hello" "$ROOT/../mina-as/tests/src/hello.s" "$ROOT/tests/expected/hello.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/trap-test.s" -o "$OUT/trap-test.elf"
-$SIM "$OUT/trap-test.elf" > "$OUT/trap-test.out" 2>/dev/null
-cmp -s "$OUT/trap-test.out" "$ROOT/tests/expected/trap-test.txt"
-rm -f "$OUT/trap-test.out"
-echo "PASS trap-test"
+run_test "uart-echo" "$ROOT/../mina-as/tests/src/uart-echo.s" "$ROOT/tests/expected/uart-echo.txt" "X"
 
-$AS "$ROOT/../mina-as/tests/src/system-ret-deleg-test.s" -o "$OUT/system-ret-deleg-test.elf"
-$SIM "$OUT/system-ret-deleg-test.elf" > "$OUT/system-ret-deleg-test.out" 2>/dev/null
-cmp -s "$OUT/system-ret-deleg-test.out" "$ROOT/tests/expected/system-ret-deleg-test.txt"
-rm -f "$OUT/system-ret-deleg-test.out"
-echo "PASS system-ret-deleg-test"
+run_test "csr-test" "$ROOT/../mina-as/tests/src/csr-test.s" "$ROOT/tests/expected/csr-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/system-ret-bits-test.s" -o "$OUT/system-ret-bits-test.elf"
-$SIM "$OUT/system-ret-bits-test.elf" > "$OUT/system-ret-bits-test.out" 2>/dev/null
-cmp -s "$OUT/system-ret-bits-test.out" "$ROOT/tests/expected/system-ret-bits-test.txt"
-rm -f "$OUT/system-ret-bits-test.out"
-echo "PASS system-ret-bits-test"
+run_test "csr-counter-test" "$ROOT/../mina-as/tests/src/csr-counter-test.s" "$ROOT/tests/expected/csr-counter-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/interrupt-basic-test.s" -o "$OUT/interrupt-basic-test.elf"
-$SIM "$OUT/interrupt-basic-test.elf" > "$OUT/interrupt-basic-test.out" 2>/dev/null
-cmp -s "$OUT/interrupt-basic-test.out" "$ROOT/tests/expected/interrupt-basic-test.txt"
-rm -f "$OUT/interrupt-basic-test.out"
-echo "PASS interrupt-basic-test"
+run_test "csr-sstatus-mask-test" "$ROOT/../mina-as/tests/src/csr-sstatus-mask-test.s" "$ROOT/tests/expected/csr-sstatus-mask-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/cap-test.s" -o "$OUT/cap-test.elf"
-$SIM "$OUT/cap-test.elf" > "$OUT/cap-test.out" 2>/dev/null
-cmp -s "$OUT/cap-test.out" "$ROOT/tests/expected/cap-test.txt"
-rm -f "$OUT/cap-test.out"
-echo "PASS cap-test"
+run_test "trap-test" "$ROOT/../mina-as/tests/src/trap-test.s" "$ROOT/tests/expected/trap-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/cap-ops-test.s" -o "$OUT/cap-ops-test.elf"
-$SIM "$OUT/cap-ops-test.elf" > "$OUT/cap-ops-test.out" 2>/dev/null
-cmp -s "$OUT/cap-ops-test.out" "$ROOT/tests/expected/cap-ops-test.txt"
-rm -f "$OUT/cap-ops-test.out"
-echo "PASS cap-ops-test"
+run_test "system-ret-deleg-test" "$ROOT/../mina-as/tests/src/system-ret-deleg-test.s" "$ROOT/tests/expected/system-ret-deleg-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/cap-fault-perm-test.s" -o "$OUT/cap-fault-perm-test.elf"
-$SIM "$OUT/cap-fault-perm-test.elf" > "$OUT/cap-fault-perm-test.out" 2>/dev/null
-cmp -s "$OUT/cap-fault-perm-test.out" "$ROOT/tests/expected/cap-fault-perm-test.txt"
-rm -f "$OUT/cap-fault-perm-test.out"
-echo "PASS cap-fault-perm-test"
+run_test "system-ret-bits-test" "$ROOT/../mina-as/tests/src/system-ret-bits-test.s" "$ROOT/tests/expected/system-ret-bits-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/cap-fault-bounds-test.s" -o "$OUT/cap-fault-bounds-test.elf"
-$SIM "$OUT/cap-fault-bounds-test.elf" > "$OUT/cap-fault-bounds-test.out" 2>/dev/null
-cmp -s "$OUT/cap-fault-bounds-test.out" "$ROOT/tests/expected/cap-fault-bounds-test.txt"
-rm -f "$OUT/cap-fault-bounds-test.out"
-echo "PASS cap-fault-bounds-test"
+run_test "interrupt-basic-test" "$ROOT/../mina-as/tests/src/interrupt-basic-test.s" "$ROOT/tests/expected/interrupt-basic-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/cap-fault-tag-test.s" -o "$OUT/cap-fault-tag-test.elf"
-$SIM "$OUT/cap-fault-tag-test.elf" > "$OUT/cap-fault-tag-test.out" 2>/dev/null
-cmp -s "$OUT/cap-fault-tag-test.out" "$ROOT/tests/expected/cap-fault-tag-test.txt"
-rm -f "$OUT/cap-fault-tag-test.out"
-echo "PASS cap-fault-tag-test"
+run_test "cap-test" "$ROOT/../mina-as/tests/src/cap-test.s" "$ROOT/tests/expected/cap-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/cap-fault-sealed-test.s" -o "$OUT/cap-fault-sealed-test.elf"
-$SIM "$OUT/cap-fault-sealed-test.elf" > "$OUT/cap-fault-sealed-test.out" 2>/dev/null
-cmp -s "$OUT/cap-fault-sealed-test.out" "$ROOT/tests/expected/cap-fault-sealed-test.txt"
-rm -f "$OUT/cap-fault-sealed-test.out"
-echo "PASS cap-fault-sealed-test"
+run_test "cap-ops-test" "$ROOT/../mina-as/tests/src/cap-ops-test.s" "$ROOT/tests/expected/cap-ops-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/syscall-io.s" -o "$OUT/syscall-io.elf"
-$SIM "$OUT/syscall-io.elf" > "$OUT/syscall-io.out" 2>/dev/null
-cmp -s "$OUT/syscall-io.out" "$ROOT/tests/expected/syscall-io.txt"
-rm -f "$OUT/syscall-io.out"
-echo "PASS syscall-io"
+run_test "cap-fault-perm-test" "$ROOT/../mina-as/tests/src/cap-fault-perm-test.s" "$ROOT/tests/expected/cap-fault-perm-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/fence-test.s" -o "$OUT/fence-test.elf"
-$SIM "$OUT/fence-test.elf" > "$OUT/fence-test.out" 2>/dev/null
-cmp -s "$OUT/fence-test.out" "$ROOT/tests/expected/fence-test.txt"
-rm -f "$OUT/fence-test.out"
-echo "PASS fence-test"
+run_test "cap-fault-bounds-test" "$ROOT/../mina-as/tests/src/cap-fault-bounds-test.s" "$ROOT/tests/expected/cap-fault-bounds-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/factorial-test.s" -o "$OUT/factorial-test.elf"
-$SIM "$OUT/factorial-test.elf" > "$OUT/factorial-test.out" 2>/dev/null
-cmp -s "$OUT/factorial-test.out" "$ROOT/tests/expected/factorial-test.txt"
-rm -f "$OUT/factorial-test.out"
-echo "PASS factorial-test"
+run_test "cap-fault-tag-test" "$ROOT/../mina-as/tests/src/cap-fault-tag-test.s" "$ROOT/tests/expected/cap-fault-tag-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/fib-test.s" -o "$OUT/fib-test.elf"
-$SIM "$OUT/fib-test.elf" > "$OUT/fib-test.out" 2>/dev/null
-cmp -s "$OUT/fib-test.out" "$ROOT/tests/expected/fib-test.txt"
-rm -f "$OUT/fib-test.out"
-echo "PASS fib-test"
+run_test "cap-fault-sealed-test" "$ROOT/../mina-as/tests/src/cap-fault-sealed-test.s" "$ROOT/tests/expected/cap-fault-sealed-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/prime-test.s" -o "$OUT/prime-test.elf"
-$SIM "$OUT/prime-test.elf" > "$OUT/prime-test.out" 2>/dev/null
-cmp -s "$OUT/prime-test.out" "$ROOT/tests/expected/prime-test.txt"
-rm -f "$OUT/prime-test.out"
-echo "PASS prime-test"
+run_test "syscall-io" "$ROOT/../mina-as/tests/src/syscall-io.s" "$ROOT/tests/expected/syscall-io.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/prime-test2.s" -o "$OUT/prime-test2.elf"
-$SIM "$OUT/prime-test2.elf" > "$OUT/prime-test2.out" 2>/dev/null
-cmp -s "$OUT/prime-test2.out" "$ROOT/tests/expected/prime-test2.txt"
-rm -f "$OUT/prime-test2.out"
-echo "PASS prime-test2"
+run_test "fence-test" "$ROOT/../mina-as/tests/src/fence-test.s" "$ROOT/tests/expected/fence-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/mext-test.s" -o "$OUT/mext-test.elf"
-$SIM "$OUT/mext-test.elf" > "$OUT/mext-test.out" 2>/dev/null
-cmp -s "$OUT/mext-test.out" "$ROOT/tests/expected/mext-test.txt"
-rm -f "$OUT/mext-test.out"
-echo "PASS mext-test"
+run_test "factorial-test" "$ROOT/../mina-as/tests/src/factorial-test.s" "$ROOT/tests/expected/factorial-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/illegal-shift-test.s" -o "$OUT/illegal-shift-test.elf"
-$SIM "$OUT/illegal-shift-test.elf" > "$OUT/illegal-shift-test.out" 2>/dev/null
-cmp -s "$OUT/illegal-shift-test.out" "$ROOT/tests/expected/illegal-shift-test.txt"
-rm -f "$OUT/illegal-shift-test.out"
-echo "PASS illegal-shift-test"
+run_test "fib-test" "$ROOT/../mina-as/tests/src/fib-test.s" "$ROOT/tests/expected/fib-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/illegal-insn-test.s" -o "$OUT/illegal-insn-test.elf"
-$SIM "$OUT/illegal-insn-test.elf" > "$OUT/illegal-insn-test.out" 2>/dev/null
-cmp -s "$OUT/illegal-insn-test.out" "$ROOT/tests/expected/illegal-insn-test.txt"
-rm -f "$OUT/illegal-insn-test.out"
-echo "PASS illegal-insn-test"
+run_test "prime-test" "$ROOT/../mina-as/tests/src/prime-test.s" "$ROOT/tests/expected/prime-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/misaligned-load-test.s" -o "$OUT/misaligned-load-test.elf"
-$SIM "$OUT/misaligned-load-test.elf" > "$OUT/misaligned-load-test.out" 2>/dev/null
-cmp -s "$OUT/misaligned-load-test.out" "$ROOT/tests/expected/misaligned-load-test.txt"
-rm -f "$OUT/misaligned-load-test.out"
-echo "PASS misaligned-load-test"
+run_test "prime-test2" "$ROOT/../mina-as/tests/src/prime-test2.s" "$ROOT/tests/expected/prime-test2.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/misaligned-store-test.s" -o "$OUT/misaligned-store-test.elf"
-$SIM "$OUT/misaligned-store-test.elf" > "$OUT/misaligned-store-test.out" 2>/dev/null
-cmp -s "$OUT/misaligned-store-test.out" "$ROOT/tests/expected/misaligned-store-test.txt"
-rm -f "$OUT/misaligned-store-test.out"
-echo "PASS misaligned-store-test"
+run_test "mext-test" "$ROOT/../mina-as/tests/src/mext-test.s" "$ROOT/tests/expected/mext-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/reverse-test.s" -o "$OUT/reverse-test.elf"
-$SIM "$OUT/reverse-test.elf" > "$OUT/reverse-test.out" 2>/dev/null
-cmp -s "$OUT/reverse-test.out" "$ROOT/tests/expected/reverse-test.txt"
-rm -f "$OUT/reverse-test.out"
-echo "PASS reverse-test"
+run_test "illegal-shift-test" "$ROOT/../mina-as/tests/src/illegal-shift-test.s" "$ROOT/tests/expected/illegal-shift-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/palindrome-test.s" -o "$OUT/palindrome-test.elf"
-$SIM "$OUT/palindrome-test.elf" > "$OUT/palindrome-test.out" 2>/dev/null
-cmp -s "$OUT/palindrome-test.out" "$ROOT/tests/expected/palindrome-test.txt"
-rm -f "$OUT/palindrome-test.out"
-echo "PASS palindrome-test"
+run_test "illegal-insn-test" "$ROOT/../mina-as/tests/src/illegal-insn-test.s" "$ROOT/tests/expected/illegal-insn-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/tensor-basic-test.s" -o "$OUT/tensor-basic-test.elf"
-$SIM "$OUT/tensor-basic-test.elf" > "$OUT/tensor-basic-test.out" 2>/dev/null
-cmp -s "$OUT/tensor-basic-test.out" "$ROOT/tests/expected/tensor-basic-test.txt"
-rm -f "$OUT/tensor-basic-test.out"
-echo "PASS tensor-basic-test"
+run_test "misaligned-load-test" "$ROOT/../mina-as/tests/src/misaligned-load-test.s" "$ROOT/tests/expected/misaligned-load-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/tensor-fmt-test.s" -o "$OUT/tensor-fmt-test.elf"
-$SIM "$OUT/tensor-fmt-test.elf" > "$OUT/tensor-fmt-test.out" 2>/dev/null
-cmp -s "$OUT/tensor-fmt-test.out" "$ROOT/tests/expected/tensor-fmt-test.txt"
-rm -f "$OUT/tensor-fmt-test.out"
-echo "PASS tensor-fmt-test"
+run_test "misaligned-store-test" "$ROOT/../mina-as/tests/src/misaligned-store-test.s" "$ROOT/tests/expected/misaligned-store-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/tensor-stride0-test.s" -o "$OUT/tensor-stride0-test.elf"
-$SIM "$OUT/tensor-stride0-test.elf" > "$OUT/tensor-stride0-test.out" 2>/dev/null
-cmp -s "$OUT/tensor-stride0-test.out" "$ROOT/tests/expected/tensor-stride0-test.txt"
-rm -f "$OUT/tensor-stride0-test.out"
-echo "PASS tensor-stride0-test"
+run_test "reverse-test" "$ROOT/../mina-as/tests/src/reverse-test.s" "$ROOT/tests/expected/reverse-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/tensor-naninf-test.s" -o "$OUT/tensor-naninf-test.elf"
-$SIM "$OUT/tensor-naninf-test.elf" > "$OUT/tensor-naninf-test.out" 2>/dev/null
-cmp -s "$OUT/tensor-naninf-test.out" "$ROOT/tests/expected/tensor-naninf-test.txt"
-rm -f "$OUT/tensor-naninf-test.out"
-echo "PASS tensor-naninf-test"
+run_test "palindrome-test" "$ROOT/../mina-as/tests/src/palindrome-test.s" "$ROOT/tests/expected/palindrome-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/tensor-sat-test.s" -o "$OUT/tensor-sat-test.elf"
-$SIM "$OUT/tensor-sat-test.elf" > "$OUT/tensor-sat-test.out" 2>/dev/null
-cmp -s "$OUT/tensor-sat-test.out" "$ROOT/tests/expected/tensor-sat-test.txt"
-rm -f "$OUT/tensor-sat-test.out"
-echo "PASS tensor-sat-test"
+run_test "tensor-basic-test" "$ROOT/../mina-as/tests/src/tensor-basic-test.s" "$ROOT/tests/expected/tensor-basic-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/tensor-illegal-fmt-test.s" -o "$OUT/tensor-illegal-fmt-test.elf"
-$SIM "$OUT/tensor-illegal-fmt-test.elf" > "$OUT/tensor-illegal-fmt-test.out" 2>/dev/null
-cmp -s "$OUT/tensor-illegal-fmt-test.out" "$ROOT/tests/expected/tensor-illegal-fmt-test.txt"
-rm -f "$OUT/tensor-illegal-fmt-test.out"
-echo "PASS tensor-illegal-fmt-test"
+run_test "tensor-fmt-test" "$ROOT/../mina-as/tests/src/tensor-fmt-test.s" "$ROOT/tests/expected/tensor-fmt-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/amo-test.s" -o "$OUT/amo-test.elf"
-$SIM "$OUT/amo-test.elf" > "$OUT/amo-test.out" 2>/dev/null
-cmp -s "$OUT/amo-test.out" "$ROOT/tests/expected/amo-test.txt"
-rm -f "$OUT/amo-test.out"
-echo "PASS amo-test"
+run_test "tensor-stride0-test" "$ROOT/../mina-as/tests/src/tensor-stride0-test.s" "$ROOT/tests/expected/tensor-stride0-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/abi-test.s" -o "$OUT/abi-test.elf"
-$SIM "$OUT/abi-test.elf" > "$OUT/abi-test.out" 2>/dev/null
-cmp -s "$OUT/abi-test.out" "$ROOT/tests/expected/abi-test.txt"
-rm -f "$OUT/abi-test.out"
-echo "PASS abi-test"
+run_test "tensor-naninf-test" "$ROOT/../mina-as/tests/src/tensor-naninf-test.s" "$ROOT/tests/expected/tensor-naninf-test.txt" ""
 
-$AS "$ROOT/../mina-as/tests/src/abi-stack-test.s" -o "$OUT/abi-stack-test.elf"
-$SIM "$OUT/abi-stack-test.elf" > "$OUT/abi-stack-test.out" 2>/dev/null
-cmp -s "$OUT/abi-stack-test.out" "$ROOT/tests/expected/abi-stack-test.txt"
-rm -f "$OUT/abi-stack-test.out"
-echo "PASS abi-stack-test"
+run_test "tensor-sat-test" "$ROOT/../mina-as/tests/src/tensor-sat-test.s" "$ROOT/tests/expected/tensor-sat-test.txt" ""
 
-$AS --text-base 0x1000 --data-base 0x3000 --bss-base 0x4000 --segment-align 0x1000 "$ROOT/../mina-as/tests/src/elf-layout-test.s" -o "$OUT/elf-layout-test.elf"
-$SIM "$OUT/elf-layout-test.elf" > "$OUT/elf-layout-test.out" 2>/dev/null
-cmp -s "$OUT/elf-layout-test.out" "$ROOT/tests/expected/elf-layout-test.txt"
-rm -f "$OUT/elf-layout-test.out"
-echo "PASS elf-layout-test"
+run_test "tensor-illegal-fmt-test" "$ROOT/../mina-as/tests/src/tensor-illegal-fmt-test.s" "$ROOT/tests/expected/tensor-illegal-fmt-test.txt" ""
+
+run_test "amo-test" "$ROOT/../mina-as/tests/src/amo-test.s" "$ROOT/tests/expected/amo-test.txt" ""
+
+run_test "abi-test" "$ROOT/../mina-as/tests/src/abi-test.s" "$ROOT/tests/expected/abi-test.txt" ""
+
+run_test "abi-stack-test" "$ROOT/../mina-as/tests/src/abi-stack-test.s" "$ROOT/tests/expected/abi-stack-test.txt" ""
+
+run_test "elf-layout-test" "$ROOT/../mina-as/tests/src/elf-layout-test.s" "$ROOT/tests/expected/elf-layout-test.txt" "" \
+  --text-base 0x1000 --data-base 0x3000 --bss-base 0x4000 --segment-align 0x1000
 
 echo "ALL TESTS PASS"
