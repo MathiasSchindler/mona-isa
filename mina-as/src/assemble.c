@@ -3,6 +3,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+static char *dup_string(const char *s) {
+    if (!s) return NULL;
+    size_t len = strlen(s) + 1;
+    char *out = (char *)malloc(len);
+    if (out) memcpy(out, s, len);
+    return out;
+}
+
 typedef enum {
     SRC_FILE,
     SRC_LINES
@@ -189,14 +197,14 @@ static int resolve_include_path(const char *dir, const char *token, char *out, s
 static int macro_capture(LineStack *stack, MacroTable *macros, char *tokens[], int count) {
     if (count < 2) return 0;
     Macro macro = {0};
-    macro.name = strdup(tokens[1]);
+    macro.name = dup_string(tokens[1]);
     if (!macro.name) return 0;
     if (count > 2) {
         macro.param_count = count - 2;
         macro.params = (char **)calloc((size_t)macro.param_count, sizeof(char *));
         if (!macro.params) return 0;
         for (int i = 0; i < macro.param_count; i++) {
-            macro.params[i] = strdup(tokens[i + 2]);
+            macro.params[i] = dup_string(tokens[i + 2]);
             if (!macro.params[i]) return 0;
         }
     }
@@ -221,7 +229,7 @@ static int macro_capture(LineStack *stack, MacroTable *macros, char *tokens[], i
         ml->tokens = (char **)calloc((size_t)lcount, sizeof(char *));
         if (!ml->tokens) return 0;
         for (int i = 0; i < lcount; i++) {
-            ml->tokens[i] = strdup(ltokens[i]);
+            ml->tokens[i] = dup_string(ltokens[i]);
             if (!ml->tokens[i]) return 0;
         }
     }
@@ -265,7 +273,7 @@ static int macro_expand(LineStack *stack, Macro *macro, char *tokens[], int coun
             len += rlen;
             buf[len] = '\0';
         }
-        lines[i] = buf ? buf : strdup("");
+        lines[i] = buf ? buf : dup_string("");
         if (!lines[i]) return 0;
     }
     LineSource src = {0};
@@ -791,8 +799,9 @@ int first_pass(FILE *f, const char *path, LabelTable *labels, const AsmOptions *
 int assemble_file(const char *in_path, const char *out_path, bool elf_output, const AsmOptions *opt) {
     FILE *f = fopen(in_path, "r");
     if (!f) return 0;
-    LabelTable labels = {0};
-    if (!first_pass(f, in_path, &labels, opt)) { fclose(f); return 0; }
+    LabelTable *labels = (LabelTable *)calloc(1, sizeof(LabelTable));
+    if (!labels) { fclose(f); return 0; }
+    if (!first_pass(f, in_path, labels, opt)) { fclose(f); free(labels); return 0; }
     rewind(f);
 
     Section text = {0}, data = {0}, bss = {0};
@@ -868,7 +877,7 @@ int assemble_file(const char *in_path, const char *out_path, bool elf_output, co
         }
 
         Section *sec = (cur == SEC_TEXT) ? &text : (cur == SEC_DATA ? &data : &bss);
-        if (!assemble_line(sec, cur, tokens, count, &labels)) {
+        if (!assemble_line(sec, cur, tokens, count, labels)) {
             uint64_t abs_pc = sec->base + sec->pc;
             fprintf(stderr, "assemble error at line %d pc=0x%llx\n", line_no, (unsigned long long)abs_pc);
             ok = 0;
@@ -882,19 +891,19 @@ int assemble_file(const char *in_path, const char *out_path, bool elf_output, co
     stack_free(&stack);
     macro_table_free(&macros);
 
-    if (!ok) { free(text.buf.data); free(data.buf.data); return 0; }
+    if (!ok) { free(text.buf.data); free(data.buf.data); free(labels); return 0; }
 
     if (opt->optimize) {
         optimize_text_section(&text);
     }
 
     if (!elf_output && (data.buf.size > 0 || bss.pc > 0 || opt->data_base != opt->text_base || opt->bss_base != opt->text_base)) {
-        free(text.buf.data); free(data.buf.data); return 0;
+        free(text.buf.data); free(data.buf.data); free(labels); return 0;
     }
 
     uint64_t entry = opt->text_base;
     uint64_t start_addr = 0;
-    if (label_find(&labels, "start", &start_addr)) entry = start_addr;
+    if (label_find(labels, "start", &start_addr)) entry = start_addr;
 
     int ok_write = 1;
     if (elf_output) {
@@ -909,5 +918,6 @@ int assemble_file(const char *in_path, const char *out_path, bool elf_output, co
     }
     free(text.buf.data);
     free(data.buf.data);
+    free(labels);
     return ok_write;
 }

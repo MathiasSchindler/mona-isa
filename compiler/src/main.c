@@ -37,6 +37,20 @@ static int run_mina_as_with_mode(const char *as_path, const char *input_s, const
 }
 
 static char *write_temp_asm(const IRProgram *ir, char **out_error) {
+#ifdef __EMSCRIPTEN__
+    const char *tmp_path = "/tmp/minac-out.s";
+    FILE *f = fopen(tmp_path, "w");
+    if (!f) {
+        if (out_error) *out_error = dup_string("error: failed to open temp file");
+        return NULL;
+    }
+    if (!codegen_emit_asm(ir, f, out_error)) {
+        fclose(f);
+        return NULL;
+    }
+    fclose(f);
+    return dup_string(tmp_path);
+#else
     char tmpl[] = "/tmp/minac-XXXXXX.s";
     int fd = mkstemps(tmpl, 2);
     if (fd < 0) {
@@ -56,6 +70,7 @@ static char *write_temp_asm(const IRProgram *ir, char **out_error) {
     }
     fclose(f);
     return dup_string(tmpl);
+#endif
 }
 
 int main(int argc, char **argv) {

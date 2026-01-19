@@ -52,6 +52,14 @@ typedef struct {
 
 static int read_exact(FILE *f, void *buf, size_t len);
 
+static char *dup_string(const char *s) {
+    if (!s) return NULL;
+    size_t len = strlen(s) + 1;
+    char *out = (char *)malloc(len);
+    if (out) memcpy(out, s, len);
+    return out;
+}
+
 typedef struct {
     unsigned char e_ident[16];
     uint16_t e_type;
@@ -298,7 +306,7 @@ static int read_symbols(FILE *f, const Elf64_Ehdr *eh, Symbol **out_syms, size_t
             Symbol *mem = (Symbol *)realloc(*out_syms, (*out_count + 1) * sizeof(Symbol));
             if (!mem) { free(strs); free(shdrs); symbols_free(*out_syms, *out_count); return 0; }
             *out_syms = mem;
-            (*out_syms)[*out_count].name = strdup(name);
+            (*out_syms)[*out_count].name = dup_string(name);
             (*out_syms)[*out_count].value = sym.st_value;
             (*out_syms)[*out_count].size = sym.st_size;
             (*out_syms)[*out_count].info = sym.st_info;

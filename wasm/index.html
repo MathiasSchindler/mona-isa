@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MINA Simulator (WASM)</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 14px; background: #0b0f14; color: #e6edf3; font-size: 13px; }
+    h1 { font-size: 16px; margin: 0 0 10px 0; }
+    .layout { display: flex; gap: 12px; height: calc(100vh - 56px); }
+    .column { display: flex; flex-direction: column; gap: 10px; height: 100%; }
+    .left { flex: 1.1; min-width: 320px; }
+    .right { flex: 1; min-width: 320px; }
+    .panel { background: #11161d; border: 1px solid #1f2937; border-radius: 8px; padding: 12px; }
+    label { display: block; margin-bottom: 6px; color: #9fb0c3; font-size: 12px; }
+    select, button { font-size: 12px; padding: 6px 8px; border-radius: 6px; border: 1px solid #2a3647; background: #0f141b; color: #e6edf3; }
+    textarea { width: 100%; min-height: 180px; height: 100%; resize: none; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; background: #0a0f15; color: #e6edf3; border: 1px solid #1f2937; border-radius: 8px; padding: 8px; }
+    button { cursor: pointer; }
+    button:disabled { opacity: 0.6; cursor: default; }
+    #output { white-space: pre-wrap; background: #0a0f15; border: 1px solid #1f2937; border-radius: 8px; padding: 10px; height: 100%; overflow: auto; }
+    .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .muted { color: #9fb0c3; font-size: 11px; }
+    .grow { flex: 1; }
+  </style>
+</head>
+<body>
+  <h1>MINA Simulator (WASM)</h1>
+
+  <div class="layout">
+    <div class="column left">
+      <div class="panel">
+        <label for="binary">Sample binary</label>
+        <div class="row">
+          <select id="binary" class="grow"></select>
+          <button id="run">Run</button>
+          <button id="clear">Clear</button>
+        </div>
+        <div class="muted" id="status">Loading…</div>
+      </div>
+
+      <div class="panel" style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
+        <label for="template">C source</label>
+        <div class="row">
+          <select id="template" class="grow"></select>
+          <button id="build">Build</button>
+          <button id="run-built">Run</button>
+          <button id="analyze">ELF Info</button>
+        </div>
+        <div class="muted" id="build-status">Loading toolchain…</div>
+        <textarea id="source" spellcheck="false"></textarea>
+      </div>
+    </div>
+
+    <div class="column right">
+      <div class="panel" style="flex: 1; display: flex; flex-direction: column;">
+        <label>Output</label>
+        <div id="output"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

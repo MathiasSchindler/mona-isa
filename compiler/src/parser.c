@@ -25,9 +25,11 @@ typedef struct EnumConst {
     long value;
 } EnumConst;
 
+static char *dup_string(const char *s);
+
 static char *append_error(char *existing, const char *next) {
     if (!next) return existing;
-    if (!existing) return strdup(next);
+    if (!existing) return dup_string(next);
     size_t a = strlen(existing);
     size_t b = strlen(next);
     char *out = (char *)malloc(a + 1 + b + 1);
@@ -41,7 +43,7 @@ static char *append_error(char *existing, const char *next) {
 }
 
 static char *format_error_at(const Token *tok, const char *msg) {
-    if (!tok) return strdup("error: <unknown>");
+    if (!tok) return dup_string("error: <unknown>");
     const char *line_start = tok->line_start ? tok->line_start : tok->lexeme;
     const char *line_end = line_start;
     while (*line_end && *line_end != '\n') line_end++;
@@ -215,7 +217,7 @@ static int enum_set(Parser *p, const char *name, long value) {
         p->enums = mem;
         p->enum_cap = next;
     }
-    p->enums[p->enum_count].name = strdup(name);
+    p->enums[p->enum_count].name = dup_string(name);
     if (!p->enums[p->enum_count].name) return 0;
     p->enums[p->enum_count].value = value;
     p->enum_count++;

@@ -2,6 +2,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+static char *dup_string(const char *s) {
+    if (!s) return NULL;
+    size_t len = strlen(s) + 1;
+    char *out = (char *)malloc(len);
+    if (out) memcpy(out, s, len);
+    return out;
+}
 #include <ctype.h>
 
 typedef struct {
@@ -104,7 +112,7 @@ static int macro_set(MacroTable *t, const char *name, size_t name_len, const cha
     for (size_t i = 0; i < t->count; i++) {
         if (strlen(t->items[i].name) == name_len && strncmp(t->items[i].name, name, name_len) == 0) {
             free(t->items[i].value);
-            t->items[i].value = strdup(value ? value : "");
+            t->items[i].value = dup_string(value ? value : "");
             return t->items[i].value != NULL;
         }
     }
@@ -120,7 +128,7 @@ static int macro_set(MacroTable *t, const char *name, size_t name_len, const cha
     memcpy(n, name, name_len);
     n[name_len] = '\0';
     t->items[t->count].name = n;
-    t->items[t->count].value = strdup(value ? value : "");
+    t->items[t->count].value = dup_string(value ? value : "");
     if (!t->items[t->count].value) return 0;
     t->count++;
     return 1;
@@ -133,7 +141,7 @@ static const char *skip_ws(const char *s) {
 
 static char *join_path(const char *base, const char *rel) {
     if (!rel || rel[0] == '\0') return NULL;
-    if (rel[0] == '/') return strdup(rel);
+    if (rel[0] == '/') return dup_string(rel);
     const char *slash = strrchr(base ? base : "", '/');
     size_t base_len = slash ? (size_t)(slash - base) : 0;
     size_t rel_len = strlen(rel);
@@ -312,7 +320,7 @@ int preprocess_source(const char *path, char **out_source, char **out_error) {
         return 0;
     }
     macros_free(&macros);
-    *out_source = out.data ? out.data : strdup("");
+    *out_source = out.data ? out.data : dup_string("");
     if (!*out_source) {
         if (out_error && !*out_error) *out_error = dup_error("error: out of memory");
         return 0;
