@@ -4,227 +4,132 @@ Goal: Implement a small C compiler that outputs MINA-compatible binaries runnabl
 
 Assumption: Use `mina-as` for assembly and linking (yes, that is the intended path here). The compiler will emit MINA assembly and then invoke `mina-as` to produce `.elf` (preferred) or `.bin` for the simulator.
 
-## Milestone C0 — Project Skeleton
+## Roadmap — Incremental Improvements (Post-C13)
+
+### Milestone N1 — Diagnostics and Error Recovery
 **Scope**
-- Create `compiler/` build layout and minimal driver.
-- Add a `README.md` describing build/run.
+- Improve parse/lower errors and keep compiling after a single error when possible.
 
 **Implementation Steps**
-1. Set up `compiler/src` and a `compiler/Makefile` to build a `minac` binary.
-2. Add a `minac` CLI that reads a `.c` file and prints a stub message.
-3. Add a `tests` folder and a tiny test harness script.
+1. Add context-rich error messages (token excerpt + caret).
+2. Implement simple panic-mode recovery at statement boundaries.
+3. Add a `--max-errors` flag.
 
 **Tests**
-- `tests/c0_smoke.c`: compile command runs and prints a “not implemented” message.
-- `tests/c0_usage.c`: invalid args show help and non-zero exit.
+- `tests/n1_err_recovery.c`: multiple errors reported in one run.
 
-## Milestone C1 — Lexer and Parser (Tiny C Subset)
+**Status:** Done (caret diagnostics, panic-mode recovery, `--max-errors`).
+
+### Milestone N2 — Constant Expressions in Initializers
 **Scope**
-- Implement a lexer and parser for a strict subset: `int`, `return`, integer literals, identifiers, `+ - * /` with precedence, and parentheses.
+- Support constant expressions for globals and local initializers.
 
 **Implementation Steps**
-1. Define tokens for keywords, identifiers, numbers, and operators.
-2. Implement Pratt or recursive-descent parsing into an AST.
-3. Add basic syntax error reporting with line/col.
+1. Add a const-eval pass for simple expressions.
+2. Allow `int x = 2+3*4;` in declarations.
 
 **Tests**
-- `tests/c1_expr.c`: `int main(){ return 2+3*4; }` parses.
-- `tests/c1_paren.c`: `return (2+3)*4;` parses.
-- `tests/c1_err.c`: missing `;` yields syntax error with line/col.
+- `tests/n2_const_init.c`: constant expressions in globals/locals.
 
-## Milestone C2 — AST Lowering to IR
+**Status:** Done (const-eval for scalar global initializers; locals already supported).
+
+### Milestone N3 — Enum Types
 **Scope**
-- Define a simple IR (three-address or stack-based) for expressions and returns.
+- Add `enum` declarations and use as integer constants.
 
 **Implementation Steps**
-1. Add IR node types for constants, binary ops, and return.
-2. Lower AST to IR with temporaries.
-3. Add an IR pretty-printer for debugging.
+1. Parse enums and store values in symbol table.
+2. Allow use in expressions and switch cases.
 
 **Tests**
-- `tests/c2_ir.c`: compare IR output to golden file.
-- `tests/c2_ir_err.c`: invalid AST cannot be lowered.
+- `tests/n3_enum.c`: enum values in arithmetic and switch.
 
-**Status:** Done (AST + IR lowering + `--emit-ir`).
+**Status:** Done (enums parsed as int type with constant values).
 
-## Milestone C3 — MINA Assembly Codegen
+### Milestone N4 — Struct/Union Initializers
 **Scope**
-- Generate MINA assembly for the IR, using `mina-as` for assembly and linking.
-- Support `main` returning an integer (exit code in a register or via syscall per existing ABI).
+- Support `{...}` aggregate initializers for locals and globals.
 
 **Implementation Steps**
-1. Define calling convention per existing MINA ABI docs.
-2. Emit `.text` with `_start` or `main` entry per simulator expectations.
-3. Implement codegen for constants, binary ops, and return.
-4. Integrate a `minac --emit-asm` option.
+1. Parse initializer lists for structs/unions/arrays.
+2. Lower to stores or data sections.
 
 **Tests**
-- `tests/c3_return.c`: `return 7;` => simulator exits with 7.
-- `tests/c3_add.c`: `return 1+2+3;` => exit 6.
-- `tests/c3_mul.c`: `return 6*7;` => exit 42.
+- `tests/n4_init_struct.c`: struct initializer and field access.
 
-**Status:** Done (assembly generation + `-o` to run `mina-as`; simulator halt checks in tests).
+**Status:** Done (aggregate initializer lists for arrays/structs/unions in locals and globals).
 
-## Milestone C4 — Variables and Assignments
+### Milestone N5 — Multi-file Compilation (Manual Link)
 **Scope**
-- Add local variables, assignment, and simple statements.
+- Allow compiling a single `.c` into assembly/object without linking.
 
 **Implementation Steps**
-1. Add symbol table for locals with stack offsets.
-2. Implement stack frame prologue/epilogue.
-3. Emit loads/stores for locals.
+1. Add `--emit-obj` or `-c` option to skip linking.
+2. Allow `mina-as` to link multiple `.s` files.
 
 **Tests**
-- `tests/c4_vars.c`: `int main(){ int x=3; int y=4; return x+y; }` => 7.
-- `tests/c4_reassign.c`: reassign and return value.
+- `tests/n5_multi_file/`: two translation units linked together.
 
-**Status:** Done (locals lowered to temporaries; assignments update temp bindings).
-
-## Milestone C5 — Control Flow (if/else, while)
+### Milestone N6 — Basic Debug Info
 **Scope**
-- Implement `if/else` and `while` for integer comparisons.
+- Emit `.file`/`.loc` directives for better traceability.
 
 **Implementation Steps**
-1. Add relational operators `== != < <= > >=` to parser.
-2. Emit branch and label sequences for conditionals and loops.
-3. Implement short-circuit logic for `&&` and `||` (optional sub-step).
+1. Track line/col through lowering into IR.
+2. Emit `.loc` entries in codegen.
 
 **Tests**
-- `tests/c5_if.c`: conditional return path.
-- `tests/c5_while.c`: compute sum in loop.
+- `tests/n6_debug_loc.c`: verify `.loc` lines in emitted asm.
 
-**Status:** Done (if/else/while, comparisons, and branch lowering).
-
-## Milestone C6 — Function Calls (No Pointers Yet)
+### Milestone N7 — Improved Optimizations
 **Scope**
-- Add function definitions and calls with integer arguments.
+- Add simple CSE and strength reduction.
+
+**Flag Policy**
+- Keep a single `-O` optimization flag; do not introduce multiple optimization flags unless absolutely necessary.
 
 **Implementation Steps**
-1. Implement function symbol table and call frame layout.
-2. Emit call/return sequences using MINA ABI.
-3. Enforce prototype checks for args.
+1. Identify repeated expressions in straight-line blocks.
+2. Replace `x * 2` with `x + x` where legal.
 
 **Tests**
-- `tests/c6_call.c`: `add(2,3)` returns 5.
-- `tests/c6_nested.c`: call from another function.
+- `tests/n7_cse.c`: repeated subexpression elimination.
 
-**Status:** Done (multi-function parsing, parameter passing via a0–a7, call/return).
-
-## Milestone C7 — Global Data and Strings
+### Milestone N8 — Better Calling Convention Stress
 **Scope**
-- Implement global variables and string literals placed in `.data`.
+- Validate >8 args and stack-passed arguments.
 
 **Implementation Steps**
-1. Emit `.data` section for globals and `.text` for code.
-2. Add `char*` string literal lowering.
-3. Add minimal `puts`-style syscall wrapper (if needed).
+1. Support stack argument passing.
+2. Update call lowering and codegen for stack args.
 
 **Tests**
-- `tests/c7_global.c`: global int initialized and read.
-- `tests/c7_string.c`: write a string via syscall.
+- `tests/n8_call_stack.c`: function with 10+ args.
 
-**Status:** Done (globals + string literals in `.data`, `puts` built-in via syscall write).
-
-## Milestone C8 — Integration with `mina-as` and Simulator
+### Milestone N9 — Preprocessor Enhancements
 **Scope**
-- Produce runnable `.elf` and `.bin` artifacts and verify in simulator.
+- Add `#ifndef/#ifdef/#endif` and `#undef`.
 
 **Implementation Steps**
-1. Add `minac -o out.elf` that runs `mina-as` as a subprocess.
-2. Add a test harness to compile and run in simulator.
-3. Ensure deterministic output and stable error handling.
+1. Implement conditional blocks.
+2. Add `#undef` to macro table.
 
 **Tests**
-- `tests/c8_smoke.c`: compile+run path with simulator exit code check.
-- `tests/c8_bin.c`: produce `.bin` and run with simulator.
+- `tests/n9_ifdef.c`: conditional compilation paths.
 
-**Status:** Done (ELF via `-o` and raw bin via `--bin`, both run in tests).
-
-## Milestone C9 — Optimizations (Optional)
+### Milestone N10 — Compiler/Assembler Regression Suite
 **Scope**
-- Add a basic optimization flag for constant folding and dead code removal.
+- Expand tests to catch toolchain regressions.
+
+**Optimization Note**
+- All optimization-related tests should continue to run under the single `-O` flag.
 
 **Implementation Steps**
-1. Implement IR-level constant folding.
-2. Remove unused temporaries in straight-line code.
-3. Add `-O` flag in `minac`.
+1. Add stress tests for stack, spills, labels, and pointers.
+2. Add a “full suite” target in `Makefile`.
 
 **Tests**
-- `tests/c9_fold.c`: compile with `-O` and run in simulator.
-- `tests/c9_dead.c`: compile with `-O` and run in simulator.
-
-**Status:** Done (`-O` enables IR constant folding and dead-code elimination).
-
-## Milestone C10 — Programmer Usability Gaps
-**Scope**
-- Reduce “too many temporaries” failures via spilling or stack temps.
-- Add pointer basics (address-of, dereference) and arrays.
-- Add simple standard-library stubs (e.g., `putchar`, `puts`, `exit`).
-- Extend control flow (`for`, `&&`, `||`, `switch`) and types (`void`, `char`).
-
-**Implementation Steps**
-1. Add a minimal register allocator with spills to stack.
-2. Implement pointer/array AST + lowering.
-3. Add libc-like wrappers around syscalls.
-4. Expand parser and codegen for more statements and types.
-
-**Tests**
-- `tests/c10_spill.c`: expression depth triggers spill but runs.
-- `tests/c10_for_arr.c`: `for` loop sum over global array.
-- `tests/c10_switch.c`: `switch` control flow.
-- `tests/c10_logic.c`: `&&`/`||`/`!` short-circuit lowering.
-- `tests/c10_ptr.c`: pointer write (`*p = ...`) with local address-taking.
-- `tests/c10_addr.c`: local address-taking (`&x`) and read via pointer.
-- `tests/c10_nested.c`: nested loops with `break`/`continue`.
-- `tests/c10_void.c`: void return path.
-- `tests/c10_putchar.c`: `putchar` builtin.
-- `tests/c10_char.c`: `char` load/store via pointer.
-- `tests/c10_exit.c`: `exit` builtin.
-
-**Status:** Done (spills, pointers/arrays, `for`/`switch`/`break`/`continue`, `&&`/`||`, array indexing, `void`/`char`, `puts`/`putchar`/`exit`).
-
-## Milestone C11 — Local Arrays and Pointer Arithmetic
-**Scope**
-- Add local arrays and pointer arithmetic (including `sizeof`).
-
-**Implementation Steps**
-1. Add local array declarations and indexing.
-2. Implement pointer arithmetic and `sizeof` for core types.
-3. Extend type checking to prevent invalid arithmetic.
-
-**Tests**
-- `tests/c11_ptrarith.c`: local array indexing via pointer arithmetic.
-- `tests/c11_sizeof.c`: `sizeof` on arrays, pointers, and `char`.
-
-**Status:** Done (local arrays, pointer arithmetic scaling, `sizeof` lowering).
-
-## Milestone C12 — Structs and Unions
-**Scope**
-- Add basic `struct`/`union` types and field access.
-
-**Implementation Steps**
-1. Parse struct/union declarations and field layouts.
-2. Implement field access (`.` and `->`).
-3. Emit correct loads/stores with alignment.
-
-**Tests**
-- `tests/c12_struct.c`: struct initialization and field access.
-- `tests/c12_union.c`: union field overlap behavior.
-
-**Status:** Done (struct/union definitions, field access with `.`/`->`, alignment/size).
-
-## Milestone C13 — Minimal Preprocessor
-**Scope**
-- Add a tiny preprocessor for `#include` and simple `#define`.
-
-**Implementation Steps**
-1. Implement line-based includes.
-2. Implement object-like macro substitution.
-3. Add error handling for missing includes.
-
-**Tests**
-- `tests/c13_include.c`: include a small header.
-- `tests/c13_define.c`: macro substitution.
+- Re-run all existing and new stress tests.
 
 ## Tooling Notes
 - Use `mina-as` for assembling and linking `.elf` output.

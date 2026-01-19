@@ -5,6 +5,6 @@
 #include "lexer.h"
 #include "ast.h"
 
-Program *parse_program(const Token *tokens, size_t count, char **out_error);
+Program *parse_program(const Token *tokens, size_t count, int max_errors, char **out_error);
 
 #endif

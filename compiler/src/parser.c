@@ -8,18 +8,74 @@ typedef struct {
     size_t count;
     size_t pos;
     char *error;
+    int error_count;
+    int max_errors;
     StructDef **structs;
     size_t struct_count;
     size_t struct_cap;
+    struct EnumConst *enums;
+    size_t enum_count;
+    size_t enum_cap;
 } Parser;
 
-static char *dup_error_at(const Token *tok, const char *msg) {
-    char buf[256];
-    snprintf(buf, sizeof(buf), "error: %d:%d: %s", tok->line, tok->col, msg);
-    size_t len = strlen(buf) + 1;
-    char *out = (char *)malloc(len);
-    if (out) memcpy(out, buf, len);
+static Parser *g_parser = NULL;
+
+typedef struct EnumConst {
+    char *name;
+    long value;
+} EnumConst;
+
+static char *append_error(char *existing, const char *next) {
+    if (!next) return existing;
+    if (!existing) return strdup(next);
+    size_t a = strlen(existing);
+    size_t b = strlen(next);
+    char *out = (char *)malloc(a + 1 + b + 1);
+    if (!out) return existing;
+    memcpy(out, existing, a);
+    out[a] = '\n';
+    memcpy(out + a + 1, next, b);
+    out[a + 1 + b] = '\0';
+    free(existing);
     return out;
+}
+
+static char *format_error_at(const Token *tok, const char *msg) {
+    if (!tok) return strdup("error: <unknown>");
+    const char *line_start = tok->line_start ? tok->line_start : tok->lexeme;
+    const char *line_end = line_start;
+    while (*line_end && *line_end != '\n') line_end++;
+    size_t line_len = (size_t)(line_end - line_start);
+    size_t caret = (tok->col > 0) ? (size_t)(tok->col - 1) : 0;
+    if (caret > line_len) caret = line_len;
+    size_t header_len = (size_t)snprintf(NULL, 0, "error: %d:%d: %s", tok->line, tok->col, msg);
+    size_t total = header_len + 1 + line_len + 1 + caret + 1 + 1;
+    char *out = (char *)malloc(total);
+    if (!out) return NULL;
+    snprintf(out, total, "error: %d:%d: %s", tok->line, tok->col, msg);
+    size_t off = strlen(out);
+    out[off++] = '\n';
+    memcpy(out + off, line_start, line_len);
+    off += line_len;
+    out[off++] = '\n';
+    for (size_t i = 0; i < caret; i++) out[off++] = ' ';
+    out[off++] = '^';
+    out[off] = '\0';
+    return out;
+}
+
+static char *dup_error_at(const Token *tok, const char *msg) {
+    char *formatted = format_error_at(tok, msg);
+    if (!formatted) return NULL;
+    if (!g_parser) return formatted;
+    if (g_parser->max_errors > 0 && g_parser->error_count >= g_parser->max_errors) {
+        free(formatted);
+        return g_parser->error;
+    }
+    g_parser->error = append_error(g_parser->error, formatted);
+    g_parser->error_count++;
+    free(formatted);
+    return g_parser->error;
 }
 
 static const Token *peek(Parser *p) {
@@ -45,7 +101,7 @@ static int match(Parser *p, TokenKind kind) {
 
 static int expect(Parser *p, TokenKind kind, const char *msg) {
     if (match(p, kind)) return 1;
-    if (!p->error) p->error = dup_error_at(peek(p), msg);
+    p->error = dup_error_at(peek(p), msg);
     return 0;
 }
 
@@ -120,6 +176,175 @@ static size_t type_size_local(const Type *type) {
         default:
             return 8;
     }
+}
+
+static void enums_free(Parser *p) {
+    if (!p) return;
+    for (size_t i = 0; i < p->enum_count; i++) {
+        free(p->enums[i].name);
+    }
+    free(p->enums);
+    p->enums = NULL;
+    p->enum_count = 0;
+    p->enum_cap = 0;
+}
+
+static int enum_find(const Parser *p, const char *name, long *out_value) {
+    if (!p || !name) return 0;
+    for (size_t i = 0; i < p->enum_count; i++) {
+        if (strcmp(p->enums[i].name, name) == 0) {
+            if (out_value) *out_value = p->enums[i].value;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int enum_set(Parser *p, const char *name, long value) {
+    if (!p || !name) return 0;
+    for (size_t i = 0; i < p->enum_count; i++) {
+        if (strcmp(p->enums[i].name, name) == 0) {
+            p->enums[i].value = value;
+            return 1;
+        }
+    }
+    if (p->enum_count + 1 > p->enum_cap) {
+        size_t next = (p->enum_cap == 0) ? 8 : p->enum_cap * 2;
+        EnumConst *mem = (EnumConst *)realloc(p->enums, next * sizeof(EnumConst));
+        if (!mem) return 0;
+        p->enums = mem;
+        p->enum_cap = next;
+    }
+    p->enums[p->enum_count].name = strdup(name);
+    if (!p->enums[p->enum_count].name) return 0;
+    p->enums[p->enum_count].value = value;
+    p->enum_count++;
+    return 1;
+}
+
+static int eval_const_expr(const Expr *expr, long *out_value) {
+    if (!expr || !out_value) return 0;
+    switch (expr->kind) {
+        case EXPR_NUMBER:
+            *out_value = expr->as.number;
+            return 1;
+        case EXPR_UNARY:
+            if (expr->as.unary.op == UN_PLUS) {
+                return eval_const_expr(expr->as.unary.expr, out_value);
+            }
+            if (expr->as.unary.op == UN_MINUS) {
+                long v = 0;
+                if (!eval_const_expr(expr->as.unary.expr, &v)) return 0;
+                *out_value = -v;
+                return 1;
+            }
+            return 0;
+        case EXPR_BINARY: {
+            long a = 0;
+            long b = 0;
+            if (!eval_const_expr(expr->as.bin.left, &a)) return 0;
+            if (!eval_const_expr(expr->as.bin.right, &b)) return 0;
+            switch (expr->as.bin.op) {
+                case BIN_ADD: *out_value = a + b; return 1;
+                case BIN_SUB: *out_value = a - b; return 1;
+                case BIN_MUL: *out_value = a * b; return 1;
+                case BIN_DIV:
+                    if (b == 0) return 0;
+                    *out_value = a / b;
+                    return 1;
+                default:
+                    return 0;
+            }
+        }
+        case EXPR_SIZEOF:
+            if (expr->as.sizeof_expr.type) {
+                *out_value = (long)type_size_local(expr->as.sizeof_expr.type);
+                return 1;
+            }
+            return 0;
+        case EXPR_IDENT: {
+            long v = 0;
+            if (g_parser && enum_find(g_parser, expr->as.ident, &v)) {
+                *out_value = v;
+                return 1;
+            }
+            return 0;
+        }
+        default:
+            return 0;
+    }
+}
+
+static int write_scalar_bytes(char *buf, size_t len, size_t offset, const Type *type, long value) {
+    if (!buf || !type) return 0;
+    size_t size = type_size_local(type);
+    if (offset + size > len) return 0;
+    if (type->kind == TYPE_CHAR) {
+        buf[offset] = (char)value;
+        return 1;
+    }
+    if (type->kind == TYPE_INT || type->kind == TYPE_PTR) {
+        for (size_t i = 0; i < 8; i++) {
+            buf[offset + i] = (char)((unsigned long)value >> (i * 8));
+        }
+        return 1;
+    }
+    return 0;
+}
+
+static int build_struct_union_bytes(Parser *p, const Type *type, Expr **list, size_t count, char **out_data, size_t *out_len) {
+    if (!type || !out_data || !out_len) return 0;
+    size_t size = type_size_local(type);
+    char *buf = (char *)calloc(size, 1);
+    if (!buf) { p->error = dup_error_at(peek(p), "out of memory"); return 0; }
+    if (type->kind != TYPE_STRUCT && type->kind != TYPE_UNION) {
+        free(buf);
+        return 0;
+    }
+    if (!type->def || type->def->field_count == 0) {
+        *out_data = buf;
+        *out_len = size;
+        return 1;
+    }
+    if (type->kind == TYPE_UNION && count > 1) {
+        free(buf);
+        p->error = dup_error_at(peek(p), "union initializer has too many values");
+        return 0;
+    }
+    size_t max_fields = type->def->field_count;
+    if (type->kind == TYPE_STRUCT && count > max_fields) {
+        free(buf);
+        p->error = dup_error_at(peek(p), "too many struct initializer values");
+        return 0;
+    }
+    if (count == 0) {
+        *out_data = buf;
+        *out_len = size;
+        return 1;
+    }
+    size_t limit = (type->kind == TYPE_UNION) ? 1 : count;
+    for (size_t i = 0; i < limit; i++) {
+        const StructField *field = &type->def->fields[i];
+        if (field->type->kind == TYPE_STRUCT || field->type->kind == TYPE_UNION || field->type->kind == TYPE_ARRAY) {
+            free(buf);
+            p->error = dup_error_at(peek(p), "nested aggregate initializer not supported");
+            return 0;
+        }
+        long v = 0;
+        if (!eval_const_expr(list[i], &v)) {
+            free(buf);
+            p->error = dup_error_at(peek(p), "initializer must be constant expression");
+            return 0;
+        }
+        if (!write_scalar_bytes(buf, size, field->offset, field->type, v)) {
+            free(buf);
+            p->error = dup_error_at(peek(p), "unsupported initializer field type");
+            return 0;
+        }
+    }
+    *out_data = buf;
+    *out_len = size;
+    return 1;
 }
 
 static Expr *new_expr(ExprKind kind, int line, int col) {
@@ -226,6 +451,10 @@ static void free_stmt_local(Stmt *stmt) {
     if (!stmt) return;
     if (stmt->kind == STMT_DECL || stmt->kind == STMT_ASSIGN) free(stmt->name);
     if (stmt->expr) free_expr_local(stmt->expr);
+    if (stmt->init_list) {
+        for (size_t i = 0; i < stmt->init_count; i++) free_expr_local(stmt->init_list[i]);
+        free(stmt->init_list);
+    }
     if (stmt->lhs) free_expr_local(stmt->lhs);
     if (stmt->index) free_expr_local(stmt->index);
     if (stmt->cond) free_expr_local(stmt->cond);
@@ -277,18 +506,68 @@ static Function *new_function(char *name) {
 
 static Expr *parse_expr(Parser *p);
 
+static Type *parse_enum_spec(Parser *p) {
+    const Token *name_tok = NULL;
+    if (peek(p)->kind == TOK_IDENT) {
+        name_tok = peek(p);
+        advance(p);
+    }
+    if (match(p, TOK_LBRACE)) {
+        long next_value = 0;
+        while (peek(p)->kind != TOK_RBRACE && peek(p)->kind != TOK_EOF) {
+            if (peek(p)->kind != TOK_IDENT) {
+                p->error = dup_error_at(peek(p), "expected enum value name");
+                return NULL;
+            }
+            char *ename = dup_lexeme(peek(p));
+            if (!ename) { p->error = dup_error_at(peek(p), "out of memory"); return NULL; }
+            advance(p);
+            long value = next_value;
+            if (match(p, TOK_ASSIGN)) {
+                Expr *val_expr = parse_expr(p);
+                if (!val_expr) { free(ename); return NULL; }
+                if (!eval_const_expr(val_expr, &value)) {
+                    p->error = dup_error_at(peek(p), "enum value must be constant expression");
+                    free_expr_local(val_expr);
+                    free(ename);
+                    return NULL;
+                }
+                free_expr_local(val_expr);
+            }
+            if (!enum_set(p, ename, value)) {
+                p->error = dup_error_at(peek(p), "out of memory");
+                free(ename);
+                return NULL;
+            }
+            free(ename);
+            next_value = value + 1;
+            if (match(p, TOK_COMMA)) {
+                if (peek(p)->kind == TOK_RBRACE) break;
+                continue;
+            }
+            break;
+        }
+        if (!expect(p, TOK_RBRACE, "expected '}'")) return NULL;
+    } else if (!name_tok) {
+        p->error = dup_error_at(peek(p), "expected enum name or '{'");
+        return NULL;
+    }
+    return new_type(TYPE_INT, NULL);
+}
+
 static Type *parse_type(Parser *p) {
     Type *base = NULL;
     if (match(p, TOK_INT)) base = new_type(TYPE_INT, NULL);
     else if (match(p, TOK_CHAR)) base = new_type(TYPE_CHAR, NULL);
     else if (match(p, TOK_VOID)) base = new_type(TYPE_VOID, NULL);
+    else if (match(p, TOK_ENUM)) base = parse_enum_spec(p);
     else if (match(p, TOK_STRUCT) || match(p, TOK_UNION)) {
         const Token *kw = p->tokens + (p->pos - 1);
         int is_union = (kw->kind == TOK_UNION);
-        if (peek(p)->kind != TOK_IDENT) {
-            if (!p->error) p->error = dup_error_at(peek(p), "expected struct/union name");
-            return NULL;
-        }
+            if (peek(p)->kind != TOK_IDENT) {
+                p->error = dup_error_at(peek(p), "expected struct/union name");
+                return NULL;
+            }
         char *name = dup_lexeme(peek(p));
         if (!name) { p->error = dup_error_at(peek(p), "out of memory"); return NULL; }
         advance(p);
@@ -297,7 +576,7 @@ static Type *parse_type(Parser *p) {
         if (match(p, TOK_LBRACE)) {
             if (def && def->field_count > 0) {
                 free(name);
-                if (!p->error) p->error = dup_error_at(peek(p), "struct/union redefinition");
+                p->error = dup_error_at(peek(p), "struct/union redefinition");
                 return NULL;
             }
             if (!def) {
@@ -390,11 +669,11 @@ struct_fail:
                 def->size = align_up_size(offset, max_align);
             }
         } else {
-            if (!def) {
-                free(name);
-                if (!p->error) p->error = dup_error_at(peek(p), "unknown struct/union");
-                return NULL;
-            }
+                if (!def) {
+                    free(name);
+                    p->error = dup_error_at(peek(p), "unknown struct/union");
+                    return NULL;
+                }
             free(name);
         }
 
@@ -451,8 +730,16 @@ static Expr *parse_primary(Parser *p) {
     if (match(p, TOK_IDENT)) {
         Expr *expr = new_expr(EXPR_IDENT, tok->line, tok->col);
         if (!expr) return NULL;
-        expr->as.ident = dup_lexeme(tok);
-        if (!expr->as.ident) { free(expr); return NULL; }
+        char *name = dup_lexeme(tok);
+        if (!name) { free(expr); return NULL; }
+        long enum_val = 0;
+        if (enum_find(p, name, &enum_val)) {
+            free(name);
+            expr->kind = EXPR_NUMBER;
+            expr->as.number = enum_val;
+            return expr;
+        }
+        expr->as.ident = name;
         return expr;
     }
     if (match(p, TOK_STRING)) {
@@ -471,7 +758,7 @@ static Expr *parse_primary(Parser *p) {
         if (!expect(p, TOK_RPAREN, "expected ')'") ) { free_expr_local(inner); return NULL; }
         return inner;
     }
-    if (!p->error) p->error = dup_error_at(peek(p), "expected primary expression");
+    p->error = dup_error_at(peek(p), "expected primary expression");
     return NULL;
 }
 
@@ -482,7 +769,7 @@ static Expr *parse_postfix(Parser *p) {
         if (match(p, TOK_LPAREN)) {
             if (expr->kind != EXPR_IDENT) {
                 free_expr_local(expr);
-                if (!p->error) p->error = dup_error_at(peek(p), "call target must be identifier");
+                p->error = dup_error_at(peek(p), "call target must be identifier");
                 return NULL;
             }
             Expr **args = NULL;
@@ -552,7 +839,7 @@ static Expr *parse_postfix(Parser *p) {
             const Token *op = p->tokens + (p->pos - 1);
             if (peek(p)->kind != TOK_IDENT) {
                 free_expr_local(expr);
-                if (!p->error) p->error = dup_error_at(peek(p), "expected field name");
+                p->error = dup_error_at(peek(p), "expected field name");
                 return NULL;
             }
             char *fname = dup_lexeme(peek(p));
@@ -579,7 +866,7 @@ static Expr *parse_unary(Parser *p) {
         expr->as.sizeof_expr.type = NULL;
         expr->as.sizeof_expr.expr = NULL;
         if (match(p, TOK_LPAREN)) {
-            if (peek(p)->kind == TOK_INT || peek(p)->kind == TOK_CHAR || peek(p)->kind == TOK_VOID || peek(p)->kind == TOK_STRUCT || peek(p)->kind == TOK_UNION) {
+            if (peek(p)->kind == TOK_INT || peek(p)->kind == TOK_CHAR || peek(p)->kind == TOK_VOID || peek(p)->kind == TOK_STRUCT || peek(p)->kind == TOK_UNION || peek(p)->kind == TOK_ENUM) {
                 Type *type = parse_type(p);
                 if (!type) { free_expr_local(expr); return NULL; }
                 if (!expect(p, TOK_RPAREN, "expected ')'")) { free_type_local(type); free_expr_local(expr); return NULL; }
@@ -722,6 +1009,46 @@ static Expr *parse_expr(Parser *p) {
     return parse_logor(p);
 }
 
+static int parse_init_list(Parser *p, Expr ***out_list, size_t *out_count) {
+    Expr **items = NULL;
+    size_t count = 0;
+    size_t cap = 0;
+    if (peek(p)->kind == TOK_RBRACE) {
+        advance(p);
+        *out_list = NULL;
+        *out_count = 0;
+        return 1;
+    }
+    while (peek(p)->kind != TOK_RBRACE && peek(p)->kind != TOK_EOF) {
+        Expr *expr = parse_expr(p);
+        if (!expr) goto fail;
+        if (count + 1 > cap) {
+            size_t next = (cap == 0) ? 4 : cap * 2;
+            Expr **mem = (Expr **)realloc(items, next * sizeof(Expr *));
+            if (!mem) { free_expr_local(expr); p->error = dup_error_at(peek(p), "out of memory"); goto fail; }
+            items = mem;
+            cap = next;
+        }
+        items[count++] = expr;
+        if (match(p, TOK_COMMA)) {
+            if (peek(p)->kind == TOK_RBRACE) break;
+            continue;
+        }
+        break;
+    }
+    if (!expect(p, TOK_RBRACE, "expected '}'")) goto fail;
+    *out_list = items;
+    *out_count = count;
+    return 1;
+
+fail:
+    if (items) {
+        for (size_t i = 0; i < count; i++) free_expr_local(items[i]);
+    }
+    free(items);
+    return 0;
+}
+
 static Expr *parse_cond(Parser *p) {
     return parse_expr(p);
 }
@@ -739,7 +1066,7 @@ static Expr *parse_lvalue(Parser *p) {
     Expr *expr = parse_unary(p);
     if (!expr) return NULL;
     if (!is_lvalue_expr(expr)) {
-        if (!p->error) p->error = dup_error_at(peek(p), "expected lvalue");
+        p->error = dup_error_at(peek(p), "expected lvalue");
         free_expr_local(expr);
         return NULL;
     }
@@ -785,10 +1112,10 @@ static Stmt *parse_stmt(Parser *p) {
         if (!expect(p, TOK_LPAREN, "expected '('") ) return NULL;
         Stmt *init = NULL;
         if (!match(p, TOK_SEMI)) {
-            if (peek(p)->kind == TOK_INT || peek(p)->kind == TOK_CHAR || peek(p)->kind == TOK_VOID || peek(p)->kind == TOK_STRUCT || peek(p)->kind == TOK_UNION) {
+            if (peek(p)->kind == TOK_INT || peek(p)->kind == TOK_CHAR || peek(p)->kind == TOK_VOID || peek(p)->kind == TOK_STRUCT || peek(p)->kind == TOK_UNION || peek(p)->kind == TOK_ENUM) {
                 Type *type = parse_type(p);
                 if (!type) return NULL;
-                if (type->kind == TYPE_VOID) { free_type_local(type); if (!p->error) p->error = dup_error_at(peek(p), "void variable not supported"); return NULL; }
+                if (type->kind == TYPE_VOID) { free_type_local(type); p->error = dup_error_at(peek(p), "void variable not supported"); return NULL; }
                 if (peek(p)->kind != TOK_IDENT) { expect(p, TOK_IDENT, "expected identifier"); return NULL; }
                 char *name = dup_lexeme(peek(p));
                 if (!name) { free_type_local(type); p->error = dup_error_at(peek(p), "out of memory"); return NULL; }
@@ -945,10 +1272,10 @@ switch_fail:
         }
         return new_stmt(STMT_RETURN, NULL, expr);
     }
-    if (peek(p)->kind == TOK_INT || peek(p)->kind == TOK_CHAR || peek(p)->kind == TOK_VOID || peek(p)->kind == TOK_STRUCT || peek(p)->kind == TOK_UNION) {
+    if (peek(p)->kind == TOK_INT || peek(p)->kind == TOK_CHAR || peek(p)->kind == TOK_VOID || peek(p)->kind == TOK_STRUCT || peek(p)->kind == TOK_UNION || peek(p)->kind == TOK_ENUM) {
         Type *type = parse_type(p);
         if (!type) return NULL;
-        if (type->kind == TYPE_VOID) { free_type_local(type); if (!p->error) p->error = dup_error_at(peek(p), "void variable not supported"); return NULL; }
+        if (type->kind == TYPE_VOID) { free_type_local(type); p->error = dup_error_at(peek(p), "void variable not supported"); return NULL; }
         if (peek(p)->kind != TOK_IDENT) {
             expect(p, TOK_IDENT, "expected identifier");
             return NULL;
@@ -964,27 +1291,37 @@ switch_fail:
             Type *arr = new_type(TYPE_ARRAY, type);
             if (!arr) { free(name); free_type_local(type); return NULL; }
             arr->array_len = (size_t)count;
+            Expr **init_list = NULL;
+            size_t init_count = 0;
             if (match(p, TOK_ASSIGN)) {
-                if (!p->error) p->error = dup_error_at(peek(p), "array initializer not supported for locals");
-                free(name);
-                free_type_local(arr);
-                return NULL;
+                if (!expect(p, TOK_LBRACE, "expected '{'")) { free(name); free_type_local(arr); return NULL; }
+                if (!parse_init_list(p, &init_list, &init_count)) { free(name); free_type_local(arr); return NULL; }
             }
             if (!expect(p, TOK_SEMI, "expected ';' after declaration")) { free(name); free_type_local(arr); return NULL; }
             Stmt *stmt = new_stmt(STMT_DECL, name, NULL);
             if (!stmt) { free(name); free_type_local(arr); return NULL; }
             stmt->decl_type = arr;
+            stmt->init_list = init_list;
+            stmt->init_count = init_count;
             return stmt;
         }
         Expr *init = NULL;
+        Expr **init_list = NULL;
+        size_t init_count = 0;
         if (match(p, TOK_ASSIGN)) {
-            init = parse_expr(p);
-            if (!init) { free(name); return NULL; }
+            if (match(p, TOK_LBRACE)) {
+                if (!parse_init_list(p, &init_list, &init_count)) { free(name); free_type_local(type); return NULL; }
+            } else {
+                init = parse_expr(p);
+                if (!init) { free(name); return NULL; }
+            }
         }
-        if (!expect(p, TOK_SEMI, "expected ';' after declaration")) { free(name); free_expr_local(init); return NULL; }
+        if (!expect(p, TOK_SEMI, "expected ';' after declaration")) { free(name); free_expr_local(init); if (init_list) { for (size_t i = 0; i < init_count; i++) free_expr_local(init_list[i]); free(init_list); } return NULL; }
         Stmt *stmt = new_stmt(STMT_DECL, name, init);
-        if (!stmt) { free(name); free_expr_local(init); free_type_local(type); return NULL; }
+        if (!stmt) { free(name); free_expr_local(init); free_type_local(type); if (init_list) { for (size_t i = 0; i < init_count; i++) free_expr_local(init_list[i]); free(init_list); } return NULL; }
         stmt->decl_type = type;
+        stmt->init_list = init_list;
+        stmt->init_count = init_count;
         return stmt;
     }
     if (peek(p)->kind == TOK_IDENT) {
@@ -1026,9 +1363,16 @@ static int parse_stmt_list(Parser *p, Stmt ***out_stmts, size_t *out_count) {
     while (peek(p)->kind != TOK_RBRACE && peek(p)->kind != TOK_EOF) {
         Stmt *stmt = parse_stmt(p);
         if (!stmt) {
-            for (size_t i = 0; i < count; i++) free_stmt_local(stmts[i]);
-            free(stmts);
-            return 0;
+            if (p->max_errors > 0 && p->error_count >= p->max_errors) {
+                for (size_t i = 0; i < count; i++) free_stmt_local(stmts[i]);
+                free(stmts);
+                return 0;
+            }
+            while (peek(p)->kind != TOK_EOF && peek(p)->kind != TOK_SEMI && peek(p)->kind != TOK_RBRACE) {
+                advance(p);
+            }
+            if (peek(p)->kind == TOK_SEMI) advance(p);
+            continue;
         }
         if (count + 1 > cap) {
             size_t next = (cap == 0) ? 8 : cap * 2;
@@ -1064,7 +1408,7 @@ static int parse_params(Parser *p, char ***out_params, Type ***out_types, size_t
     while (1) {
         Type *type = parse_type(p);
         if (!type) { expect(p, TOK_INT, "expected type in parameter"); goto fail; }
-        if (type->kind == TYPE_VOID) { free_type_local(type); if (!p->error) p->error = dup_error_at(peek(p), "void parameter not supported"); goto fail; }
+        if (type->kind == TYPE_VOID) { free_type_local(type); p->error = dup_error_at(peek(p), "void parameter not supported"); goto fail; }
         if (peek(p)->kind != TOK_IDENT) { expect(p, TOK_IDENT, "expected parameter name"); goto fail; }
         char *name = dup_lexeme(peek(p));
         if (!name) { p->error = dup_error_at(peek(p), "out of memory"); goto fail; }
@@ -1123,26 +1467,47 @@ static int program_add_global(Program *program, Global *g, Parser *p) {
     return 1;
 }
 
-Program *parse_program(const Token *tokens, size_t count, char **out_error) {
+Program *parse_program(const Token *tokens, size_t count, int max_errors, char **out_error) {
     Parser p = {0};
     p.tokens = tokens;
     p.count = count;
     p.pos = 0;
     p.error = NULL;
+    p.error_count = 0;
+    p.max_errors = max_errors > 0 ? max_errors : 1;
     p.structs = NULL;
     p.struct_count = 0;
     p.struct_cap = 0;
+    p.enums = NULL;
+    p.enum_count = 0;
+    p.enum_cap = 0;
+    g_parser = &p;
     Program *program = (Program *)calloc(1, sizeof(Program));
     if (!program) { if (out_error) *out_error = dup_error_at(peek(&p), "out of memory"); return NULL; }
 
     while (peek(&p)->kind != TOK_EOF) {
         Type *type = parse_type(&p);
-        if (!type) { p.error = dup_error_at(peek(&p), "expected type"); goto done; }
+        if (!type) {
+            p.error = dup_error_at(peek(&p), "expected type");
+            if (p.max_errors > 0 && p.error_count >= p.max_errors) goto done;
+            while (peek(&p)->kind != TOK_EOF && peek(&p)->kind != TOK_SEMI && peek(&p)->kind != TOK_RBRACE) advance(&p);
+            if (peek(&p)->kind == TOK_SEMI) advance(&p);
+            continue;
+        }
         if ((type->kind == TYPE_STRUCT || type->kind == TYPE_UNION) && match(&p, TOK_SEMI)) {
             free_type_local(type);
             continue;
         }
-        if (peek(&p)->kind != TOK_IDENT) { expect(&p, TOK_IDENT, "expected name"); free_type_local(type); goto done; }
+        if (peek(&p)->kind != TOK_IDENT) {
+            if (peek(&p)->kind == TOK_SEMI) {
+                free_type_local(type);
+                advance(&p);
+                continue;
+            }
+            expect(&p, TOK_IDENT, "expected name");
+            free_type_local(type);
+            goto done;
+        }
         char *name = dup_lexeme(peek(&p));
         if (!name) { free_type_local(type); p.error = dup_error_at(peek(&p), "out of memory"); goto done; }
         advance(&p);
@@ -1153,27 +1518,61 @@ Program *parse_program(const Token *tokens, size_t count, char **out_error) {
             long count = peek(&p)->value;
             advance(&p);
             if (!expect(&p, TOK_RBRACKET, "expected ']'")) { free_type_local(type); free(name); goto done; }
-            long *vals = NULL;
-            size_t vcount = 0;
+            Expr **init_list = NULL;
+            size_t init_count = 0;
             if (match(&p, TOK_ASSIGN)) {
                 if (!expect(&p, TOK_LBRACE, "expected '{'")) { free_type_local(type); free(name); goto done; }
-                while (peek(&p)->kind != TOK_RBRACE && peek(&p)->kind != TOK_EOF) {
-                    if (peek(&p)->kind != TOK_NUMBER) { expect(&p, TOK_NUMBER, "expected array element"); free(vals); free_type_local(type); free(name); goto done; }
-                    long v = peek(&p)->value;
-                    advance(&p);
-                    long *mem = (long *)realloc(vals, (vcount + 1) * sizeof(long));
-                    if (!mem) { p.error = dup_error_at(peek(&p), "out of memory"); free(vals); free_type_local(type); free(name); goto done; }
-                    vals = mem;
-                    vals[vcount++] = v;
-                    if (match(&p, TOK_COMMA)) continue;
-                    break;
-                }
-                if (!expect(&p, TOK_RBRACE, "expected '}'")) { free(vals); free_type_local(type); free(name); goto done; }
+                if (!parse_init_list(&p, &init_list, &init_count)) { free_type_local(type); free(name); goto done; }
             }
-            if (!expect(&p, TOK_SEMI, "expected ';'")) { free(vals); free_type_local(type); free(name); goto done; }
+            if (!expect(&p, TOK_SEMI, "expected ';'")) {
+                if (init_list) {
+                    for (size_t i = 0; i < init_count; i++) free_expr_local(init_list[i]);
+                    free(init_list);
+                }
+                free_type_local(type);
+                free(name);
+                goto done;
+            }
             Type *arr_type = new_type(TYPE_PTR, type);
-            if (!arr_type) { free(vals); free_type_local(type); free(name); p.error = dup_error_at(peek(&p), "out of memory"); goto done; }
-            Global *g = new_global(GLOB_INT_ARR, name, count, (char *)vals, vcount, arr_type);
+            if (!arr_type) {
+                if (init_list) {
+                    for (size_t i = 0; i < init_count; i++) free_expr_local(init_list[i]);
+                    free(init_list);
+                }
+                free_type_local(type);
+                free(name);
+                p.error = dup_error_at(peek(&p), "out of memory");
+                goto done;
+            }
+            if (init_count > (size_t)count) {
+                for (size_t i = 0; i < init_count; i++) free_expr_local(init_list[i]);
+                free(init_list);
+                free_type_local(arr_type);
+                free(name);
+                p.error = dup_error_at(peek(&p), "too many array initializers");
+                goto done;
+            }
+            long *vals = NULL;
+            if (init_count > 0) {
+                vals = (long *)calloc(init_count, sizeof(long));
+                if (!vals) { p.error = dup_error_at(peek(&p), "out of memory"); free_type_local(arr_type); free(name); goto done; }
+                for (size_t i = 0; i < init_count; i++) {
+                    long v = 0;
+                    if (!eval_const_expr(init_list[i], &v)) {
+                        p.error = dup_error_at(peek(&p), "initializer must be constant expression");
+                        free(vals);
+                        free_type_local(arr_type);
+                        free(name);
+                        for (size_t j = 0; j < init_count; j++) free_expr_local(init_list[j]);
+                        free(init_list);
+                        goto done;
+                    }
+                    vals[i] = v;
+                }
+            }
+            for (size_t i = 0; i < init_count; i++) free_expr_local(init_list[i]);
+            free(init_list);
+            Global *g = new_global(GLOB_INT_ARR, name, count, (char *)vals, init_count, arr_type);
             if (!g) { p.error = dup_error_at(peek(&p), "out of memory"); free(vals); free_type_local(arr_type); free(name); goto done; }
             if (!program_add_global(program, g, &p)) { free(g->name); free(g->data); free(g->type); free(g); goto done; }
             continue;
@@ -1210,10 +1609,32 @@ Program *parse_program(const Token *tokens, size_t count, char **out_error) {
 
         if (type->kind == TYPE_VOID) { free_type_local(type); free(name); p.error = dup_error_at(peek(&p), "void variable not supported"); goto done; }
         if (type->kind == TYPE_STRUCT || type->kind == TYPE_UNION) {
-            free_type_local(type);
-            free(name);
-            p.error = dup_error_at(peek(&p), "struct/union globals not supported");
-            goto done;
+            Expr **init_list = NULL;
+            size_t init_count = 0;
+            if (match(&p, TOK_ASSIGN)) {
+                if (!expect(&p, TOK_LBRACE, "expected '{'")) { free_type_local(type); free(name); goto done; }
+                if (!parse_init_list(&p, &init_list, &init_count)) { free_type_local(type); free(name); goto done; }
+            }
+            if (!expect(&p, TOK_SEMI, "expected ';'")) { free_type_local(type); free(name); goto done; }
+            char *data = NULL;
+            size_t len = 0;
+            if (!build_struct_union_bytes(&p, type, init_list, init_count, &data, &len)) {
+                if (init_list) {
+                    for (size_t i = 0; i < init_count; i++) free_expr_local(init_list[i]);
+                    free(init_list);
+                }
+                free_type_local(type);
+                free(name);
+                goto done;
+            }
+            if (init_list) {
+                for (size_t i = 0; i < init_count; i++) free_expr_local(init_list[i]);
+                free(init_list);
+            }
+            Global *g = new_global(GLOB_BYTES, name, 0, data, len, type);
+            if (!g) { p.error = dup_error_at(peek(&p), "out of memory"); free(data); free_type_local(type); free(name); goto done; }
+            if (!program_add_global(program, g, &p)) { free(g->name); free(g->data); free(g->type); free(g); goto done; }
+            continue;
         }
 
         long value = 0;
@@ -1231,15 +1652,20 @@ Program *parse_program(const Token *tokens, size_t count, char **out_error) {
                 if (!decode_string(peek(&p), &data, &len, &p.error)) { free_type_local(type); free(name); goto done; }
                 advance(&p);
                 kind = GLOB_STR;
-            } else if (peek(&p)->kind == TOK_NUMBER) {
-                value = peek(&p)->value;
-                advance(&p);
-                kind = (type->kind == TYPE_CHAR) ? GLOB_CHAR : GLOB_INT;
             } else {
-                expect(&p, TOK_NUMBER, "expected initializer");
-                free_type_local(type);
-                free(name);
-                goto done;
+                Expr *init = parse_expr(&p);
+                if (!init) { free_type_local(type); free(name); goto done; }
+                long v = 0;
+                if (!eval_const_expr(init, &v)) {
+                    p.error = dup_error_at(peek(&p), "initializer must be constant expression");
+                    free_expr_local(init);
+                    free_type_local(type);
+                    free(name);
+                    goto done;
+                }
+                free_expr_local(init);
+                value = v;
+                kind = (type->kind == TYPE_CHAR) ? GLOB_CHAR : GLOB_INT;
             }
         } else {
             kind = (type->kind == TYPE_CHAR) ? GLOB_CHAR : GLOB_INT;
@@ -1254,9 +1680,11 @@ Program *parse_program(const Token *tokens, size_t count, char **out_error) {
 done:
     program->structs = p.structs;
     program->struct_count = p.struct_count;
+    enums_free(&p);
     if (p.error) {
         free_program(program);
     }
     if (out_error) *out_error = p.error;
+    g_parser = NULL;
     return p.error ? NULL : program;
 }

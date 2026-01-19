@@ -150,7 +150,7 @@ int codegen_emit_asm(const IRProgram *ir, FILE *out, char **out_error) {
     size_t global_cap = 0;
     for (size_t i = 0; i < ir->count; i++) {
         const IRInst *inst = &ir->insts[i];
-        if (inst->op == IR_GLOBAL_INT || inst->op == IR_GLOBAL_CHAR || inst->op == IR_GLOBAL_STR || inst->op == IR_GLOBAL_INT_ARR) {
+        if (inst->op == IR_GLOBAL_INT || inst->op == IR_GLOBAL_CHAR || inst->op == IR_GLOBAL_STR || inst->op == IR_GLOBAL_INT_ARR || inst->op == IR_GLOBAL_BYTES) {
             if (find_name(globals, global_count, inst->name) < 0) {
                 if (global_count + 1 > global_cap) {
                     size_t next = (global_cap == 0) ? 8 : global_cap * 2;
@@ -208,7 +208,7 @@ int codegen_emit_asm(const IRProgram *ir, FILE *out, char **out_error) {
 
     int has_data = 0;
     for (size_t i = 0; i < ir->count; i++) {
-        if (ir->insts[i].op == IR_GLOBAL_INT || ir->insts[i].op == IR_GLOBAL_CHAR || ir->insts[i].op == IR_GLOBAL_STR || ir->insts[i].op == IR_GLOBAL_INT_ARR) { has_data = 1; break; }
+        if (ir->insts[i].op == IR_GLOBAL_INT || ir->insts[i].op == IR_GLOBAL_CHAR || ir->insts[i].op == IR_GLOBAL_STR || ir->insts[i].op == IR_GLOBAL_INT_ARR || ir->insts[i].op == IR_GLOBAL_BYTES) { has_data = 1; break; }
     }
     if (has_data) {
         fprintf(out, ".data\n");
@@ -228,6 +228,11 @@ int codegen_emit_asm(const IRProgram *ir, FILE *out, char **out_error) {
                     fprintf(out, "  .dword %ld\n", v);
                 }
             } else if (inst->op == IR_GLOBAL_STR) {
+                fprintf(out, "%s:\n", inst->name ? inst->name : "<anon>");
+                for (size_t b = 0; b < inst->len; b++) {
+                    fprintf(out, "  .byte %u\n", (unsigned char)inst->data[b]);
+                }
+            } else if (inst->op == IR_GLOBAL_BYTES) {
                 fprintf(out, "%s:\n", inst->name ? inst->name : "<anon>");
                 for (size_t b = 0; b < inst->len; b++) {
                     fprintf(out, "  .byte %u\n", (unsigned char)inst->data[b]);
@@ -255,6 +260,7 @@ int codegen_emit_asm(const IRProgram *ir, FILE *out, char **out_error) {
             case IR_GLOBAL_CHAR:
             case IR_GLOBAL_INT_ARR:
             case IR_GLOBAL_STR:
+            case IR_GLOBAL_BYTES:
             case IR_LOCAL_ALLOC:
                 break;
             case IR_FUNC:

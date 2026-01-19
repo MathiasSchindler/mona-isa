@@ -18,6 +18,7 @@ typedef enum {
     IR_GLOBAL_CHAR,
     IR_GLOBAL_INT_ARR,
     IR_GLOBAL_STR,
+    IR_GLOBAL_BYTES,
     IR_WRITE,
     IR_LOCAL_ALLOC,
     IR_FUNC,
@@ -71,6 +72,7 @@ void ir_emit_global_int(IRProgram *ir, const char *name, long value);
 void ir_emit_global_char(IRProgram *ir, const char *name, unsigned char value);
 void ir_emit_global_int_arr(IRProgram *ir, const char *name, const long *values, size_t count, size_t init_count);
 void ir_emit_global_str(IRProgram *ir, const char *name, const char *data, size_t len);
+void ir_emit_global_bytes(IRProgram *ir, const char *name, const char *data, size_t len);
 int ir_emit_write(IRProgram *ir, int addr_temp, size_t len);
 void ir_emit_local_alloc(IRProgram *ir, const char *name, size_t size);
 void ir_emit_exit(IRProgram *ir, int value_temp);

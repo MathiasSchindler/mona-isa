@@ -1,0 +1,5 @@
+int MAGIC = 41;
+
+int inc(int x) {
+    return x + 1;
+}

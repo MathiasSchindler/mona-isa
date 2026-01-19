@@ -641,6 +641,80 @@ static int lower_stmt_list(Stmt **stmts, size_t count, IRProgram *ir, LocalMap *
     return 1;
 }
 
+static int emit_store_offset(IRProgram *ir, int base_addr, size_t offset, int value_temp, const Type *type) {
+    int addr = base_addr;
+    if (offset != 0) {
+        int off = ir_emit_const(ir, (long)offset);
+        if (off < 0) return 0;
+        addr = ir_emit_bin(ir, BIN_ADD, base_addr, off);
+        if (addr < 0) return 0;
+    }
+    emit_store_by_type(ir, addr, value_temp, type);
+    return 1;
+}
+
+static int lower_init_list(const Stmt *stmt, IRProgram *ir, LocalMap *locals, GlobalMap *globals, char **out_error) {
+    if (!stmt || !stmt->decl_type || !stmt->init_list) return 1;
+    Type *type = stmt->decl_type;
+    int base_addr = ir_emit_addr(ir, stmt->name);
+    if (base_addr < 0) return 0;
+    if (type->kind == TYPE_ARRAY) {
+        if (!type->base || type->base->kind == TYPE_ARRAY || type->base->kind == TYPE_STRUCT || type->base->kind == TYPE_UNION) {
+            if (out_error && !*out_error) *out_error = dup_error_simple("error: array initializer element type not supported");
+            return 0;
+        }
+        size_t elem_size = (size_t)type_size(type->base);
+        size_t max = type->array_len;
+        if (stmt->init_count > max) {
+            if (out_error && !*out_error) *out_error = dup_error_simple("error: too many array initializers");
+            return 0;
+        }
+        for (size_t i = 0; i < max; i++) {
+            int val = -1;
+            if (i < stmt->init_count) {
+                val = lower_expr(stmt->init_list[i], ir, locals, globals, out_error);
+                if (val < 0) return 0;
+            } else {
+                val = ir_emit_const(ir, 0);
+                if (val < 0) return 0;
+            }
+            if (!emit_store_offset(ir, base_addr, i * elem_size, val, type->base)) return 0;
+        }
+        return 1;
+    }
+    if (type->kind == TYPE_STRUCT || type->kind == TYPE_UNION) {
+        if (!type->def || type->def->field_count == 0) return 1;
+        if (type->kind == TYPE_UNION && stmt->init_count > 1) {
+            if (out_error && !*out_error) *out_error = dup_error_simple("error: union initializer has too many values");
+            return 0;
+        }
+        if (type->kind == TYPE_STRUCT && stmt->init_count > type->def->field_count) {
+            if (out_error && !*out_error) *out_error = dup_error_simple("error: too many struct initializer values");
+            return 0;
+        }
+        size_t limit = (type->kind == TYPE_UNION) ? 1 : type->def->field_count;
+        for (size_t i = 0; i < limit; i++) {
+            const StructField *field = &type->def->fields[i];
+            if (field->type->kind == TYPE_STRUCT || field->type->kind == TYPE_UNION || field->type->kind == TYPE_ARRAY) {
+                if (out_error && !*out_error) *out_error = dup_error_simple("error: nested aggregate initializer not supported");
+                return 0;
+            }
+            int val = -1;
+            if (i < stmt->init_count) {
+                val = lower_expr(stmt->init_list[i], ir, locals, globals, out_error);
+                if (val < 0) return 0;
+            } else {
+                val = ir_emit_const(ir, 0);
+                if (val < 0) return 0;
+            }
+            if (!emit_store_offset(ir, base_addr, field->offset, val, field->type)) return 0;
+            if (type->kind == TYPE_UNION) break;
+        }
+        return 1;
+    }
+    return 1;
+}
+
 static int lower_stmt(const Stmt *stmt, IRProgram *ir, LocalMap *locals, GlobalMap *globals, LoopCtx *ctx, char **out_error) {
     switch (stmt->kind) {
         case STMT_DECL: {
@@ -649,10 +723,6 @@ static int lower_stmt(const Stmt *stmt, IRProgram *ir, LocalMap *locals, GlobalM
                 return 0;
             }
             if (stmt->decl_type && stmt->decl_type->kind == TYPE_ARRAY) {
-                if (stmt->expr) {
-                    if (out_error && !*out_error) *out_error = dup_error_simple("error: array initializer not supported");
-                    return 0;
-                }
                 size_t size = (size_t)type_size(stmt->decl_type);
                 ir_emit_local_alloc(ir, stmt->name, size);
                 if (!locals_add(locals, stmt->name, -1, stmt->decl_type, size)) {
@@ -660,13 +730,12 @@ static int lower_stmt(const Stmt *stmt, IRProgram *ir, LocalMap *locals, GlobalM
                     return 0;
                 }
                 locals->items[locals_find(locals, stmt->name)].addressable = 1;
+                if (stmt->init_list) {
+                    if (!lower_init_list(stmt, ir, locals, globals, out_error)) return 0;
+                }
                 return 1;
             }
             if (stmt->decl_type && (stmt->decl_type->kind == TYPE_STRUCT || stmt->decl_type->kind == TYPE_UNION)) {
-                if (stmt->expr) {
-                    if (out_error && !*out_error) *out_error = dup_error_simple("error: struct/union initializer not supported");
-                    return 0;
-                }
                 size_t size = (size_t)type_size(stmt->decl_type);
                 ir_emit_local_alloc(ir, stmt->name, size);
                 if (!locals_add(locals, stmt->name, -1, stmt->decl_type, size)) {
@@ -674,7 +743,14 @@ static int lower_stmt(const Stmt *stmt, IRProgram *ir, LocalMap *locals, GlobalM
                     return 0;
                 }
                 locals->items[locals_find(locals, stmt->name)].addressable = 1;
+                if (stmt->init_list) {
+                    if (!lower_init_list(stmt, ir, locals, globals, out_error)) return 0;
+                }
                 return 1;
+            }
+            if (stmt->init_list) {
+                if (out_error && !*out_error) *out_error = dup_error_simple("error: initializer list requires aggregate type");
+                return 0;
             }
             int var_temp = ir_new_temp(ir);
             int expr_temp = -1;
@@ -885,6 +961,7 @@ int lower_program(const Program *program, IRProgram *ir, char **out_error) {
             ir_emit_global_int_arr(ir, g->name, vals, (size_t)g->value, g->len);
         }
         if (g->kind == GLOB_STR) ir_emit_global_str(ir, g->name, g->data, g->len);
+        if (g->kind == GLOB_BYTES) ir_emit_global_bytes(ir, g->name, g->data, g->len);
         if (!globals_add(&globals, g->name, g->kind, g->len, g->type)) {
             if (out_error && !*out_error) *out_error = dup_error_simple("error: out of memory");
             globals_free(&globals);

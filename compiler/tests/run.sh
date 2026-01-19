@@ -49,6 +49,41 @@ if "$BIN" "$ROOT_DIR/tests/c1_err.c" >/dev/null 2>&1; then
 fi
 echo "PASS c1_err"
 
+# n1_err_recovery.c: should report multiple errors
+OUT_LOG=$("$BIN" --max-errors 3 "$ROOT_DIR/tests/n1_err_recovery.c" 2>&1 || true)
+if [ -z "$OUT_LOG" ]; then
+  echo "FAIL n1_err_recovery" >&2
+  exit 1
+fi
+ERR_COUNT=$(echo "$OUT_LOG" | grep -c "error:")
+if [ "$ERR_COUNT" -lt 2 ]; then
+  echo "FAIL n1_err_recovery" >&2
+  echo "$OUT_LOG" >&2
+  exit 1
+fi
+echo "PASS n1_err_recovery"
+
+# n2_const_init.c: constant expressions in initializers
+"$BIN" -o "$OUT/n2_const_init.elf" "$ROOT_DIR/tests/n2_const_init.c"
+OUT_LOG=$("$SIM" "$OUT/n2_const_init.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL n2_const_init_sim" >&2; exit 1; }
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL n2_const_init_sim" >&2; exit 1; }
+echo "PASS n2_const_init_sim"
+
+# n3_enum.c: enum declarations and usage
+"$BIN" -o "$OUT/n3_enum.elf" "$ROOT_DIR/tests/n3_enum.c"
+OUT_LOG=$("$SIM" "$OUT/n3_enum.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL n3_enum_sim" >&2; exit 1; }
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL n3_enum_sim" >&2; exit 1; }
+echo "PASS n3_enum_sim"
+
+# n4_init_struct.c: aggregate initializers
+"$BIN" -o "$OUT/n4_init_struct.elf" "$ROOT_DIR/tests/n4_init_struct.c"
+OUT_LOG=$("$SIM" "$OUT/n4_init_struct.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL n4_init_struct_sim" >&2; exit 1; }
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL n4_init_struct_sim" >&2; exit 1; }
+echo "PASS n4_init_struct_sim"
+
 # c2_ir.c: should lower and match IR output
 "$BIN" --emit-ir "$ROOT_DIR/tests/c2_ir.c" > "$ROOT_DIR/tests/c2_ir.out"
 if ! cmp -s "$ROOT_DIR/tests/c2_ir.out" "$ROOT_DIR/tests/c2_ir.txt"; then
@@ -355,3 +390,16 @@ OUT_LOG=$("$SIM" "$OUT/c12_union.elf" 2>&1 || true)
 echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL c12_union_sim" >&2; exit 1; }
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c12_union_sim" >&2; exit 1; }
 echo "PASS c12_union_sim"
+
+# C13 tests
+"$BIN" -o "$OUT/c13_include.elf" "$ROOT_DIR/tests/c13_include.c"
+OUT_LOG=$("$SIM" "$OUT/c13_include.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL c13_include_sim" >&2; exit 1; }
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c13_include_sim" >&2; exit 1; }
+echo "PASS c13_include_sim"
+
+"$BIN" -o "$OUT/c13_define.elf" "$ROOT_DIR/tests/c13_define.c"
+OUT_LOG=$("$SIM" "$OUT/c13_define.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL c13_define_sim" >&2; exit 1; }
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c13_define_sim" >&2; exit 1; }
+echo "PASS c13_define_sim"

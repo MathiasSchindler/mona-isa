@@ -64,6 +64,10 @@ static void free_stmt(Stmt *stmt) {
     if (!stmt) return;
     if (stmt->kind == STMT_DECL || stmt->kind == STMT_ASSIGN) free(stmt->name);
     if (stmt->expr) free_expr(stmt->expr);
+    if (stmt->init_list) {
+        for (size_t i = 0; i < stmt->init_count; i++) free_expr(stmt->init_list[i]);
+        free(stmt->init_list);
+    }
     if (stmt->lhs) free_expr(stmt->lhs);
     if (stmt->index) free_expr(stmt->index);
     if (stmt->cond) free_expr(stmt->cond);

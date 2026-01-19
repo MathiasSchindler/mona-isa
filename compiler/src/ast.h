@@ -146,6 +146,8 @@ typedef struct Stmt {
     StmtKind kind;
     char *name;
     Expr *expr;
+    Expr **init_list;
+    size_t init_count;
     Expr *lhs;
     Expr *index;
     Expr *cond;
@@ -177,7 +179,8 @@ typedef enum {
     GLOB_INT,
     GLOB_CHAR,
     GLOB_STR,
-    GLOB_INT_ARR
+    GLOB_INT_ARR,
+    GLOB_BYTES
 } GlobalKind;
 
 typedef struct {

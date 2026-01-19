@@ -21,6 +21,7 @@ typedef enum {
     TOK_SIZEOF,
     TOK_STRUCT,
     TOK_UNION,
+    TOK_ENUM,
     TOK_IDENT,
     TOK_NUMBER,
     TOK_LPAREN,
@@ -58,6 +59,7 @@ typedef struct {
     int length;
     int line;
     int col;
+    const char *line_start;
     long value;
 } Token;
 

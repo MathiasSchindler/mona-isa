@@ -26,7 +26,7 @@ void ir_free(IRProgram *ir) {
     if (ir->insts) {
         for (size_t i = 0; i < ir->count; i++) {
             if (ir->insts[i].op == IR_CALL) free(ir->insts[i].args);
-            if (ir->insts[i].op == IR_GLOBAL_STR) free(ir->insts[i].data);
+            if (ir->insts[i].op == IR_GLOBAL_STR || ir->insts[i].op == IR_GLOBAL_BYTES) free(ir->insts[i].data);
             if (ir->insts[i].op == IR_GLOBAL_INT_ARR) free(ir->insts[i].values);
         }
     }
@@ -151,6 +151,19 @@ void ir_emit_global_int_arr(IRProgram *ir, const char *name, const long *values,
 void ir_emit_global_str(IRProgram *ir, const char *name, const char *data, size_t len) {
     IRInst inst = {0};
     inst.op = IR_GLOBAL_STR;
+    inst.name = name;
+    inst.len = len;
+    if (len > 0) {
+        inst.data = (char *)malloc(len);
+        if (!inst.data) return;
+        memcpy(inst.data, data, len);
+    }
+    ir_push(ir, inst);
+}
+
+void ir_emit_global_bytes(IRProgram *ir, const char *name, const char *data, size_t len) {
+    IRInst inst = {0};
+    inst.op = IR_GLOBAL_BYTES;
     inst.name = name;
     inst.len = len;
     if (len > 0) {
@@ -305,6 +318,9 @@ void ir_print(const IRProgram *ir, FILE *out) {
                 break;
             case IR_GLOBAL_STR:
                 fprintf(out, "global %s = <str:%zu>\n", inst->name ? inst->name : "<anon>", inst->len);
+                break;
+            case IR_GLOBAL_BYTES:
+                fprintf(out, "global %s = <bytes:%zu>\n", inst->name ? inst->name : "<anon>", inst->len);
                 break;
             case IR_WRITE:
                 fprintf(out, "t%d = write t%d, %zu\n", inst->dst, inst->lhs, inst->len);

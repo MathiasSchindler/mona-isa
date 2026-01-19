@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #include "lexer.h"
+#include "preproc.h"
 #include "parser.h"
 #include "ir.h"
 #include "lower.h"
@@ -11,23 +12,7 @@
 #include "opt.h"
 
 static void print_usage(const char *prog) {
-    fprintf(stderr, "usage: %s [--emit-ir] [--emit-asm] [--bin] [-O] [-o out.elf] <file.c>\n", prog);
-}
-
-static char *read_file(const char *path) {
-    FILE *f = fopen(path, "rb");
-    if (!f) return NULL;
-    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return NULL; }
-    long len = ftell(f);
-    if (len < 0) { fclose(f); return NULL; }
-    if (fseek(f, 0, SEEK_SET) != 0) { fclose(f); return NULL; }
-    char *buf = (char *)malloc((size_t)len + 1);
-    if (!buf) { fclose(f); return NULL; }
-    size_t n = fread(buf, 1, (size_t)len, f);
-    fclose(f);
-    if (n != (size_t)len) { free(buf); return NULL; }
-    buf[len] = '\0';
-    return buf;
+    fprintf(stderr, "usage: %s [--emit-ir] [--emit-asm] [--bin] [-O] [--max-errors N] [-o out.elf] <file.c>\n", prog);
 }
 
 static char *dup_string(const char *s) {
@@ -78,6 +63,7 @@ int main(int argc, char **argv) {
     int emit_asm = 0;
     int emit_bin = 0;
     int optimize = 0;
+    int max_errors = 5;
     const char *output_path = NULL;
     const char *path = NULL;
 
@@ -88,6 +74,9 @@ int main(int argc, char **argv) {
             emit_asm = 1;
         } else if (strcmp(argv[i], "--bin") == 0) {
             emit_bin = 1;
+        } else if (strcmp(argv[i], "--max-errors") == 0) {
+            if (i + 1 >= argc) { print_usage(argv[0]); return 1; }
+            max_errors = atoi(argv[++i]);
         } else if (strcmp(argv[i], "-O") == 0) {
             optimize = 1;
         } else if (strcmp(argv[i], "-o") == 0) {
@@ -114,15 +103,16 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    char *source = read_file(path);
-    if (!source) {
-        fprintf(stderr, "error: failed to read '%s'\n", path);
+    char *err = NULL;
+    char *source = NULL;
+    if (!preprocess_source(path, &source, &err)) {
+        fprintf(stderr, "%s\n", err ? err : "error: preprocessor failed");
+        free(err);
         return 1;
     }
 
     Token *tokens = NULL;
     size_t count = 0;
-    char *err = NULL;
     if (!lex_all(source, &tokens, &count, &err)) {
         fprintf(stderr, "%s\n", err ? err : "error: lexing failed");
         free(err);
@@ -130,7 +120,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    Program *program = parse_program(tokens, count, &err);
+    Program *program = parse_program(tokens, count, max_errors, &err);
     if (!program) {
         fprintf(stderr, "%s\n", err ? err : "error: parse failed");
         free(err);

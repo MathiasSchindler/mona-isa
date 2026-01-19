@@ -37,6 +37,7 @@ int lex_all(const char *src, Token **out_tokens, size_t *out_count, char **out_e
     Token *tokens = NULL;
     size_t count = 0, cap = 0;
     int line = 1, col = 1;
+    const char *line_start = src;
 
     for (size_t i = 0; src[i] != '\0';) {
         char c = src[i];
@@ -46,6 +47,7 @@ int lex_all(const char *src, Token **out_tokens, size_t *out_count, char **out_e
         }
         if (c == '\n') {
             i++; line++; col = 1;
+            line_start = &src[i];
             continue;
         }
         if (c == '/' && src[i + 1] == '/') {
@@ -67,6 +69,7 @@ int lex_all(const char *src, Token **out_tokens, size_t *out_count, char **out_e
         tok.lexeme = &src[i];
         tok.line = line;
         tok.col = col;
+        tok.line_start = line_start;
 
         if (isdigit((unsigned char)c)) {
             long v = 0;
@@ -103,6 +106,7 @@ int lex_all(const char *src, Token **out_tokens, size_t *out_count, char **out_e
             if (tok.length == 5 && strncmp(tok.lexeme, "while", 5) == 0) tok.kind = TOK_WHILE;
             if (tok.length == 6 && strncmp(tok.lexeme, "struct", 6) == 0) tok.kind = TOK_STRUCT;
             if (tok.length == 5 && strncmp(tok.lexeme, "union", 5) == 0) tok.kind = TOK_UNION;
+            if (tok.length == 4 && strncmp(tok.lexeme, "enum", 4) == 0) tok.kind = TOK_ENUM;
             if (!push_token(&tokens, &count, &cap, tok)) goto oom;
             continue;
         }
