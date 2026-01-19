@@ -32,6 +32,12 @@ Assemble and link with `mina-as`:
 ./minac -o out.elf path/to/file.c
 ```
 
+Emit raw binary:
+
+```sh
+./minac --bin -o out.bin path/to/file.c
+```
+
 ## Tests (C0)
 
 ```sh

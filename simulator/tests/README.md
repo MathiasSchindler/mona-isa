@@ -66,4 +66,5 @@ Current self-checking tests:
 - amo-test (amoswap.w/d atomics)
 - abi-test (call/return + callee-saved)
 - abi-stack-test (stack args + alignment)
+- directives-test (.globl/.file/.loc/.rodata/.align)
 - elf-layout-test (ELF segments + entry)

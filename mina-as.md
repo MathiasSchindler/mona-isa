@@ -51,6 +51,13 @@ This document proposes milestones for introducing optional optimization in `mina
 - Provide a summary of applied optimizations when `-O/--optimize` is enabled.
 - Ensure diagnostics include “optimized away” context when relevant.
 
+### A7 — Toolchain Interop & Debuggability
+- Add optional directives for compiler output (`.globl`, `.rodata` via `.section`, `.align` with larger values).
+- Accept and ignore common debug directives (`.file`, `.loc`) for smoother compiler output.
+- Improve error messages with source line hints for generated assembly.
+
+**Status:** Done (directive support + ignore rules + line-numbered errors; directives test added).
+
 ## Notes on Refactor Strategy
 
 - Start with minimal interfaces: token stream → instruction IR → encoding.

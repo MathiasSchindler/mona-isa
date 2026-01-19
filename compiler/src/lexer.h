@@ -6,6 +6,13 @@
 typedef enum {
     TOK_EOF = 0,
     TOK_INT,
+    TOK_CHAR,
+    TOK_FOR,
+    TOK_SWITCH,
+    TOK_CASE,
+    TOK_DEFAULT,
+    TOK_BREAK,
+    TOK_CONTINUE,
     TOK_RETURN,
     TOK_IF,
     TOK_ELSE,
@@ -18,6 +25,9 @@ typedef enum {
     TOK_RBRACE,
     TOK_SEMI,
     TOK_COMMA,
+    TOK_COLON,
+    TOK_LBRACKET,
+    TOK_RBRACKET,
     TOK_PLUS,
     TOK_MINUS,
     TOK_STAR,
@@ -28,7 +38,12 @@ typedef enum {
     TOK_LT,
     TOK_LTE,
     TOK_GT,
-    TOK_GTE
+    TOK_GTE,
+    TOK_STRING,
+    TOK_AMP,
+    TOK_ANDAND,
+    TOK_OROR,
+    TOK_NOT
 } TokenKind;
 
 typedef struct {

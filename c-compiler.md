@@ -123,6 +123,8 @@ Assumption: Use `mina-as` for assembly and linking (yes, that is the intended pa
 - `tests/c7_global.c`: global int initialized and read.
 - `tests/c7_string.c`: write a string via syscall.
 
+**Status:** Done (globals + string literals in `.data`, `puts` built-in via syscall write).
+
 ## Milestone C8 — Integration with `mina-as` and Simulator
 **Scope**
 - Produce runnable `.elf` and `.bin` artifacts and verify in simulator.
@@ -136,18 +138,46 @@ Assumption: Use `mina-as` for assembly and linking (yes, that is the intended pa
 - `tests/c8_smoke.c`: compile+run path with simulator exit code check.
 - `tests/c8_bin.c`: produce `.bin` and run with simulator.
 
+**Status:** Done (ELF via `-o` and raw bin via `--bin`, both run in tests).
+
 ## Milestone C9 — Optimizations (Optional)
 **Scope**
 - Add a basic optimization flag for constant folding and dead code removal.
 
 **Implementation Steps**
 1. Implement IR-level constant folding.
-2. Remove unused temporaries and unreachable blocks.
+2. Remove unused temporaries in straight-line code.
 3. Add `-O` flag in `minac`.
 
 **Tests**
-- `tests/c9_fold.c`: confirm same output as unoptimized.
-- `tests/c9_dead.c`: dead code removed (compare asm size or IR diff).
+- `tests/c9_fold.c`: compile with `-O` and run in simulator.
+- `tests/c9_dead.c`: compile with `-O` and run in simulator.
+
+**Status:** Done (`-O` enables IR constant folding and dead-code elimination).
+
+## Milestone C10 — Programmer Usability Gaps
+**Scope**
+- Reduce “too many temporaries” failures via spilling or stack temps.
+- Add pointer basics (address-of, dereference) and arrays.
+- Add simple standard-library stubs (e.g., `putchar`, `puts`, `exit`).
+- Extend control flow (`for`, `&&`, `||`, `switch`) and types (`void`, `char`).
+
+**Implementation Steps**
+1. Add a minimal register allocator with spills to stack.
+2. Implement pointer/array AST + lowering.
+3. Add libc-like wrappers around syscalls.
+4. Expand parser and codegen for more statements and types.
+
+**Tests**
+- `tests/c10_spill.c`: expression depth triggers spill but runs.
+- `tests/c10_for_arr.c`: `for` loop sum over global array.
+- `tests/c10_switch.c`: `switch` control flow.
+- `tests/c10_logic.c`: `&&`/`||`/`!` short-circuit lowering.
+- `tests/c10_ptr.c`: pointer write (`*p = ...`) with local address-taking.
+- `tests/c10_addr.c`: local address-taking (`&x`) and read via pointer.
+- `tests/c10_nested.c`: nested loops with `break`/`continue`.
+
+**Status:** Done (spills, pointers/arrays, `for`/`switch`/`break`/`continue`, `&&`/`||`, array indexing). Partial for libc stubs/types (only `puts` exists; `void`, `char` types not yet implemented).
 
 ## Tooling Notes
 - Use `mina-as` for assembling and linking `.elf` output.

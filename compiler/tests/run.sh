@@ -180,3 +180,78 @@ echo "PASS c6_call_sim"
 OUT_LOG=$("$SIM" "$OUT/c6_nested.elf" 2>&1 || true)
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c6_nested_sim" >&2; exit 1; }
 echo "PASS c6_nested_sim"
+
+# C program smoke tests (compile + run)
+"$BIN" -o "$OUT/c_prog_fib.elf" "$ROOT_DIR/tests/c_prog_fib.c"
+OUT_LOG=$("$SIM" "$OUT/c_prog_fib.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c_prog_fib_sim" >&2; exit 1; }
+echo "PASS c_prog_fib_sim"
+
+"$BIN" -o "$OUT/c_prog_prime.elf" "$ROOT_DIR/tests/c_prog_prime.c"
+OUT_LOG=$("$SIM" "$OUT/c_prog_prime.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c_prog_prime_sim" >&2; exit 1; }
+echo "PASS c_prog_prime_sim"
+
+# C7 globals and strings
+"$BIN" -o "$OUT/c7_global.elf" "$ROOT_DIR/tests/c7_global.c"
+OUT_LOG=$("$SIM" "$OUT/c7_global.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c7_global_sim" >&2; exit 1; }
+echo "PASS c7_global_sim"
+
+"$BIN" -o "$OUT/c7_string.elf" "$ROOT_DIR/tests/c7_string.c"
+OUT_LOG=$("$SIM" "$OUT/c7_string.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c7_string_sim" >&2; exit 1; }
+echo "PASS c7_string_sim"
+
+# C8 bin output check
+"$BIN" --bin -o "$OUT/c8_return.bin" "$ROOT_DIR/tests/c3_return.c"
+OUT_LOG=$("$SIM" "$OUT/c8_return.bin" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c8_bin_sim" >&2; exit 1; }
+echo "PASS c8_bin_sim"
+
+# C9 optimizations
+"$BIN" -O -o "$OUT/c9_fold.elf" "$ROOT_DIR/tests/c9_fold.c"
+OUT_LOG=$("$SIM" "$OUT/c9_fold.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c9_fold_sim" >&2; exit 1; }
+echo "PASS c9_fold_sim"
+
+"$BIN" -O -o "$OUT/c9_dead.elf" "$ROOT_DIR/tests/c9_dead.c"
+OUT_LOG=$("$SIM" "$OUT/c9_dead.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c9_dead_sim" >&2; exit 1; }
+echo "PASS c9_dead_sim"
+
+# C10 tests
+"$BIN" -o "$OUT/c10_for_arr.elf" "$ROOT_DIR/tests/c10_for_arr.c"
+OUT_LOG=$("$SIM" "$OUT/c10_for_arr.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c10_for_arr_sim" >&2; exit 1; }
+echo "PASS c10_for_arr_sim"
+
+"$BIN" -o "$OUT/c10_switch.elf" "$ROOT_DIR/tests/c10_switch.c"
+OUT_LOG=$("$SIM" "$OUT/c10_switch.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c10_switch_sim" >&2; exit 1; }
+echo "PASS c10_switch_sim"
+
+"$BIN" -o "$OUT/c10_logic.elf" "$ROOT_DIR/tests/c10_logic.c"
+OUT_LOG=$("$SIM" "$OUT/c10_logic.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c10_logic_sim" >&2; exit 1; }
+echo "PASS c10_logic_sim"
+
+"$BIN" -o "$OUT/c10_ptr.elf" "$ROOT_DIR/tests/c10_ptr.c"
+OUT_LOG=$("$SIM" "$OUT/c10_ptr.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c10_ptr_sim" >&2; exit 1; }
+echo "PASS c10_ptr_sim"
+
+"$BIN" -o "$OUT/c10_addr.elf" "$ROOT_DIR/tests/c10_addr.c"
+OUT_LOG=$("$SIM" "$OUT/c10_addr.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c10_addr_sim" >&2; exit 1; }
+echo "PASS c10_addr_sim"
+
+"$BIN" -o "$OUT/c10_nested.elf" "$ROOT_DIR/tests/c10_nested.c"
+OUT_LOG=$("$SIM" "$OUT/c10_nested.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c10_nested_sim" >&2; exit 1; }
+echo "PASS c10_nested_sim"
+
+"$BIN" -o "$OUT/c10_spill.elf" "$ROOT_DIR/tests/c10_spill.c"
+OUT_LOG=$("$SIM" "$OUT/c10_spill.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c10_spill_sim" >&2; exit 1; }
+echo "PASS c10_spill_sim"

@@ -6,6 +6,7 @@ static int is_section_directive(char *tokens[], int count, SectionKind *out) {
     if (count == 0 || tokens[0][0] != '.') return 0;
     if (strcmp(tokens[0], ".text") == 0) { *out = SEC_TEXT; return 1; }
     if (strcmp(tokens[0], ".data") == 0) { *out = SEC_DATA; return 1; }
+    if (strcmp(tokens[0], ".rodata") == 0) { *out = SEC_DATA; return 1; }
     if (strcmp(tokens[0], ".bss") == 0) { *out = SEC_BSS; return 1; }
     if (strcmp(tokens[0], ".section") == 0 && count >= 2 && section_from_name(tokens[1], out)) return 1;
     return 0;
@@ -45,11 +46,18 @@ int emit_directive(Section *sec, SectionKind kind, char *tokens[], int count) {
     if (strcmp(tokens[0], ".align") == 0) {
         if (count < 2) return 0;
         int64_t v; if (!parse_int(tokens[1], &v)) return 0;
-        uint64_t mask = (1ull << v) - 1ull;
-        while ((sec->pc & mask) != 0) {
+        if (v < 0) return 0;
+        uint64_t align = (v >= 63) ? (1ull << 63) : (1ull << v);
+        uint64_t next = align_up(sec->pc, align);
+        while (sec->pc < next) {
             if (kind != SEC_BSS) buf_write_u8(&sec->buf, 0);
             sec->pc++;
         }
+        return 1;
+    }
+    if (strcmp(tokens[0], ".globl") == 0 || strcmp(tokens[0], ".global") == 0 ||
+        strcmp(tokens[0], ".file") == 0 || strcmp(tokens[0], ".loc") == 0 ||
+        strcmp(tokens[0], ".type") == 0 || strcmp(tokens[0], ".size") == 0) {
         return 1;
     }
     if (strcmp(tokens[0], ".byte") == 0 && count >= 2) {
@@ -420,8 +428,9 @@ int first_pass(FILE *f, LabelTable *labels, const AsmOptions *opt) {
                 *pc = (uint64_t)v - base;
             } else if (strcmp(tokens[0], ".align") == 0 && count >= 2) {
                 int64_t v; if (!parse_int(tokens[1], &v)) return 0;
-                uint64_t mask = (1ull << v) - 1ull;
-                while ((*pc & mask) != 0) (*pc)++;
+                if (v < 0) return 0;
+                uint64_t align = (v >= 63) ? (1ull << 63) : (1ull << v);
+                *pc = align_up(*pc, align);
             } else if (strcmp(tokens[0], ".byte") == 0) *pc += (uint64_t)(count - 1);
             else if (strcmp(tokens[0], ".half") == 0) *pc += (uint64_t)(2 * (count - 1));
             else if (strcmp(tokens[0], ".word") == 0) *pc += (uint64_t)(4 * (count - 1));
@@ -473,8 +482,10 @@ int assemble_file(const char *in_path, const char *out_path, bool elf_output, co
     SectionKind cur = SEC_TEXT;
     char line[MAX_LINE];
     int ok = 1;
+    int line_no = 0;
     bool skip_unreachable = false;
     while (fgets(line, sizeof(line), f)) {
+        line_no++;
         strip_comment(line);
         char *tokens[MAX_TOKENS];
         int count = tokenize(line, tokens, MAX_TOKENS);
@@ -501,7 +512,7 @@ int assemble_file(const char *in_path, const char *out_path, bool elf_output, co
         Section *sec = (cur == SEC_TEXT) ? &text : (cur == SEC_DATA ? &data : &bss);
         if (!assemble_line(sec, cur, tokens, count, &labels)) {
             uint64_t abs_pc = sec->base + sec->pc;
-            fprintf(stderr, "assemble error at pc=0x%llx\n", (unsigned long long)abs_pc);
+            fprintf(stderr, "assemble error at line %d pc=0x%llx\n", line_no, (unsigned long long)abs_pc);
             ok = 0;
             break;
         }

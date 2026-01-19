@@ -21,6 +21,7 @@ int section_from_name(const char *s, SectionKind *out) {
     if (name[0] == '.') name++;
     if (strcmp(name, "text") == 0) { *out = SEC_TEXT; return 1; }
     if (strcmp(name, "data") == 0) { *out = SEC_DATA; return 1; }
+    if (strcmp(name, "rodata") == 0) { *out = SEC_DATA; return 1; }
     if (strcmp(name, "bss") == 0) { *out = SEC_BSS; return 1; }
     return 0;
 }

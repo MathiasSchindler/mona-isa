@@ -88,10 +88,38 @@ int lex_all(const char *src, Token **out_tokens, size_t *out_count, char **out_e
             tok.length = (int)(i - start);
             tok.kind = TOK_IDENT;
             if (tok.length == 3 && strncmp(tok.lexeme, "int", 3) == 0) tok.kind = TOK_INT;
+            if (tok.length == 4 && strncmp(tok.lexeme, "char", 4) == 0) tok.kind = TOK_CHAR;
+            if (tok.length == 3 && strncmp(tok.lexeme, "for", 3) == 0) tok.kind = TOK_FOR;
+            if (tok.length == 6 && strncmp(tok.lexeme, "switch", 6) == 0) tok.kind = TOK_SWITCH;
+            if (tok.length == 4 && strncmp(tok.lexeme, "case", 4) == 0) tok.kind = TOK_CASE;
+            if (tok.length == 7 && strncmp(tok.lexeme, "default", 7) == 0) tok.kind = TOK_DEFAULT;
+            if (tok.length == 5 && strncmp(tok.lexeme, "break", 5) == 0) tok.kind = TOK_BREAK;
+            if (tok.length == 8 && strncmp(tok.lexeme, "continue", 8) == 0) tok.kind = TOK_CONTINUE;
             if (tok.length == 6 && strncmp(tok.lexeme, "return", 6) == 0) tok.kind = TOK_RETURN;
             if (tok.length == 2 && strncmp(tok.lexeme, "if", 2) == 0) tok.kind = TOK_IF;
             if (tok.length == 4 && strncmp(tok.lexeme, "else", 4) == 0) tok.kind = TOK_ELSE;
             if (tok.length == 5 && strncmp(tok.lexeme, "while", 5) == 0) tok.kind = TOK_WHILE;
+            if (!push_token(&tokens, &count, &cap, tok)) goto oom;
+            continue;
+        }
+
+        if (c == '"') {
+            size_t start = i;
+            i++; col++;
+            while (src[i] && src[i] != '"') {
+                if (src[i] == '\\' && src[i + 1]) { i += 2; col += 2; continue; }
+                if (src[i] == '\n') { i++; line++; col = 1; continue; }
+                i++; col++;
+            }
+            if (src[i] != '"') {
+                if (out_error) *out_error = dup_error("unterminated string literal", line, col);
+                free(tokens);
+                return 0;
+            }
+            i++; col++;
+            tok.kind = TOK_STRING;
+            tok.lexeme = &src[start];
+            tok.length = (int)(i - start);
             if (!push_token(&tokens, &count, &cap, tok)) goto oom;
             continue;
         }
@@ -103,10 +131,31 @@ int lex_all(const char *src, Token **out_tokens, size_t *out_count, char **out_e
             if (!push_token(&tokens, &count, &cap, tok)) goto oom;
             continue;
         }
+        if (c == '&' && src[i + 1] == '&') {
+            tok.kind = TOK_ANDAND;
+            tok.length = 2;
+            i += 2; col += 2;
+            if (!push_token(&tokens, &count, &cap, tok)) goto oom;
+            continue;
+        }
+        if (c == '|' && src[i + 1] == '|') {
+            tok.kind = TOK_OROR;
+            tok.length = 2;
+            i += 2; col += 2;
+            if (!push_token(&tokens, &count, &cap, tok)) goto oom;
+            continue;
+        }
         if (c == '!' && src[i + 1] == '=') {
             tok.kind = TOK_NEQ;
             tok.length = 2;
             i += 2; col += 2;
+            if (!push_token(&tokens, &count, &cap, tok)) goto oom;
+            continue;
+        }
+        if (c == '!' ) {
+            tok.kind = TOK_NOT;
+            tok.length = 1;
+            i++; col++;
             if (!push_token(&tokens, &count, &cap, tok)) goto oom;
             continue;
         }
@@ -139,6 +188,10 @@ int lex_all(const char *src, Token **out_tokens, size_t *out_count, char **out_e
             case '=' : tok.kind = TOK_ASSIGN; tok.length = 1; break;
             case '<' : tok.kind = TOK_LT; tok.length = 1; break;
             case '>' : tok.kind = TOK_GT; tok.length = 1; break;
+            case '&' : tok.kind = TOK_AMP; tok.length = 1; break;
+            case ':' : tok.kind = TOK_COLON; tok.length = 1; break;
+            case '[' : tok.kind = TOK_LBRACKET; tok.length = 1; break;
+            case ']' : tok.kind = TOK_RBRACKET; tok.length = 1; break;
             default:
                 if (out_error) *out_error = dup_error("unexpected character", line, col);
                 free(tokens);

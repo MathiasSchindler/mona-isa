@@ -8,9 +8,10 @@
 #include "ir.h"
 #include "lower.h"
 #include "codegen.h"
+#include "opt.h"
 
 static void print_usage(const char *prog) {
-    fprintf(stderr, "usage: %s [--emit-ir] [--emit-asm] [-o out.elf] <file.c>\n", prog);
+    fprintf(stderr, "usage: %s [--emit-ir] [--emit-asm] [--bin] [-O] [-o out.elf] <file.c>\n", prog);
 }
 
 static char *read_file(const char *path) {
@@ -36,9 +37,17 @@ static char *dup_string(const char *s) {
     return out;
 }
 
-static int run_mina_as(const char *as_path, const char *input_s, const char *output_path) {
+static int ends_with(const char *s, const char *suffix) {
+    size_t sl = strlen(s);
+    size_t su = strlen(suffix);
+    if (sl < su) return 0;
+    return strcmp(s + (sl - su), suffix) == 0;
+}
+
+static int run_mina_as_with_mode(const char *as_path, const char *input_s, const char *output_path, int bin_out) {
     char cmd[1024];
-    snprintf(cmd, sizeof(cmd), "%s %s -o %s", as_path, input_s, output_path);
+    if (bin_out) snprintf(cmd, sizeof(cmd), "%s --bin --data-base 0 --bss-base 0 %s -o %s", as_path, input_s, output_path);
+    else snprintf(cmd, sizeof(cmd), "%s %s -o %s", as_path, input_s, output_path);
     return system(cmd);
 }
 
@@ -67,6 +76,8 @@ static char *write_temp_asm(const IRProgram *ir, char **out_error) {
 int main(int argc, char **argv) {
     int emit_ir = 0;
     int emit_asm = 0;
+    int emit_bin = 0;
+    int optimize = 0;
     const char *output_path = NULL;
     const char *path = NULL;
 
@@ -75,6 +86,10 @@ int main(int argc, char **argv) {
             emit_ir = 1;
         } else if (strcmp(argv[i], "--emit-asm") == 0) {
             emit_asm = 1;
+        } else if (strcmp(argv[i], "--bin") == 0) {
+            emit_bin = 1;
+        } else if (strcmp(argv[i], "-O") == 0) {
+            optimize = 1;
         } else if (strcmp(argv[i], "-o") == 0) {
             if (i + 1 >= argc) { print_usage(argv[0]); return 1; }
             output_path = argv[++i];
@@ -92,6 +107,10 @@ int main(int argc, char **argv) {
     }
     if (emit_asm && output_path) {
         fprintf(stderr, "error: cannot use --emit-asm with -o\n");
+        return 1;
+    }
+    if (emit_bin && !output_path) {
+        fprintf(stderr, "error: --bin requires -o\n");
         return 1;
     }
 
@@ -132,6 +151,10 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    if (optimize) {
+        ir_optimize(&ir);
+    }
+
     if (emit_ir) {
         ir_print(&ir, stdout);
     }
@@ -151,7 +174,8 @@ int main(int argc, char **argv) {
         }
         const char *as_path = getenv("MINA_AS");
         if (!as_path) as_path = "../mina-as/mina-as";
-        int rc = run_mina_as(as_path, asm_path, output_path);
+        int bin_out = emit_bin || (output_path && ends_with(output_path, ".bin"));
+        int rc = run_mina_as_with_mode(as_path, asm_path, output_path, bin_out);
         unlink(asm_path);
         free(asm_path);
         if (rc != 0) {

@@ -16,6 +16,12 @@
 - Document a recommended C cross-compiler flow (e.g., LLVM/Clang target triple, minimal runtime, linker script).
 - Add a tiny C "hello" or arithmetic test compiled to MINA as a validation target.
 
+### M10 — C Usability Gaps
+- Add a basic register allocator with spilling to avoid “too many temporaries”.
+- Implement pointer/array basics (address-of, dereference) for real data handling.
+- Provide minimal libc stubs (`puts`, `putchar`, `exit`) over syscalls.
+- Extend statements (`for`, `&&`, `||`, `switch`) and core types (`void`, `char`).
+
 ## Implementation Guidelines
 
 - Prefer small, testable changes and keep behavior backward-compatible.

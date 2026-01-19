@@ -9,6 +9,13 @@ typedef enum {
     IR_CONST,
     IR_BIN,
     IR_MOV,
+    IR_ADDR,
+    IR_LOAD,
+    IR_STORE,
+    IR_GLOBAL_INT,
+    IR_GLOBAL_INT_ARR,
+    IR_GLOBAL_STR,
+    IR_WRITE,
     IR_FUNC,
     IR_PARAM,
     IR_CALL,
@@ -29,6 +36,10 @@ typedef struct {
     const char *name;
     int *args;
     int argc;
+    char *data;
+    size_t len;
+    long *values;
+    size_t val_count;
 } IRInst;
 
 typedef struct {
@@ -46,6 +57,13 @@ int ir_emit_const(IRProgram *ir, long value);
 int ir_emit_bin(IRProgram *ir, BinOp op, int lhs, int rhs);
 void ir_emit_mov(IRProgram *ir, int dst, int src);
 void ir_emit_ret(IRProgram *ir, int value_temp);
+int ir_emit_addr(IRProgram *ir, const char *name);
+int ir_emit_load(IRProgram *ir, int addr_temp);
+void ir_emit_store(IRProgram *ir, int addr_temp, int value_temp);
+void ir_emit_global_int(IRProgram *ir, const char *name, long value);
+void ir_emit_global_int_arr(IRProgram *ir, const char *name, const long *values, size_t count, size_t init_count);
+void ir_emit_global_str(IRProgram *ir, const char *name, const char *data, size_t len);
+int ir_emit_write(IRProgram *ir, int addr_temp, size_t len);
 void ir_emit_func(IRProgram *ir, const char *name);
 void ir_emit_param(IRProgram *ir, int index, int dst);
 int ir_emit_call(IRProgram *ir, const char *name, const int *args, int argc);

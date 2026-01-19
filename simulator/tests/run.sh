@@ -117,6 +117,8 @@ run_test "abi-test" "$ROOT/../mina-as/tests/src/abi-test.s" "$ROOT/tests/expecte
 
 run_test "abi-stack-test" "$ROOT/../mina-as/tests/src/abi-stack-test.s" "$ROOT/tests/expected/abi-stack-test.txt" ""
 
+run_test "directives-test" "$ROOT/../mina-as/tests/src/directives-test.s" "$ROOT/tests/expected/directives-test.txt" ""
+
 run_test "elf-layout-test" "$ROOT/../mina-as/tests/src/elf-layout-test.s" "$ROOT/tests/expected/elf-layout-test.txt" "" \
   --text-base 0x1000 --data-base 0x3000 --bss-base 0x4000 --segment-align 0x1000
 
