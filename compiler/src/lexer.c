@@ -89,6 +89,38 @@ int lex_all(const char *src, Token **out_tokens, size_t *out_count, char **out_e
             tok.kind = TOK_IDENT;
             if (tok.length == 3 && strncmp(tok.lexeme, "int", 3) == 0) tok.kind = TOK_INT;
             if (tok.length == 6 && strncmp(tok.lexeme, "return", 6) == 0) tok.kind = TOK_RETURN;
+            if (tok.length == 2 && strncmp(tok.lexeme, "if", 2) == 0) tok.kind = TOK_IF;
+            if (tok.length == 4 && strncmp(tok.lexeme, "else", 4) == 0) tok.kind = TOK_ELSE;
+            if (tok.length == 5 && strncmp(tok.lexeme, "while", 5) == 0) tok.kind = TOK_WHILE;
+            if (!push_token(&tokens, &count, &cap, tok)) goto oom;
+            continue;
+        }
+
+        if (c == '=' && src[i + 1] == '=') {
+            tok.kind = TOK_EQ;
+            tok.length = 2;
+            i += 2; col += 2;
+            if (!push_token(&tokens, &count, &cap, tok)) goto oom;
+            continue;
+        }
+        if (c == '!' && src[i + 1] == '=') {
+            tok.kind = TOK_NEQ;
+            tok.length = 2;
+            i += 2; col += 2;
+            if (!push_token(&tokens, &count, &cap, tok)) goto oom;
+            continue;
+        }
+        if (c == '<' && src[i + 1] == '=') {
+            tok.kind = TOK_LTE;
+            tok.length = 2;
+            i += 2; col += 2;
+            if (!push_token(&tokens, &count, &cap, tok)) goto oom;
+            continue;
+        }
+        if (c == '>' && src[i + 1] == '=') {
+            tok.kind = TOK_GTE;
+            tok.length = 2;
+            i += 2; col += 2;
             if (!push_token(&tokens, &count, &cap, tok)) goto oom;
             continue;
         }
@@ -99,10 +131,14 @@ int lex_all(const char *src, Token **out_tokens, size_t *out_count, char **out_e
             case '{' : tok.kind = TOK_LBRACE; tok.length = 1; break;
             case '}' : tok.kind = TOK_RBRACE; tok.length = 1; break;
             case ';' : tok.kind = TOK_SEMI; tok.length = 1; break;
+            case ',' : tok.kind = TOK_COMMA; tok.length = 1; break;
             case '+' : tok.kind = TOK_PLUS; tok.length = 1; break;
             case '-' : tok.kind = TOK_MINUS; tok.length = 1; break;
             case '*' : tok.kind = TOK_STAR; tok.length = 1; break;
             case '/' : tok.kind = TOK_SLASH; tok.length = 1; break;
+            case '=' : tok.kind = TOK_ASSIGN; tok.length = 1; break;
+            case '<' : tok.kind = TOK_LT; tok.length = 1; break;
+            case '>' : tok.kind = TOK_GT; tok.length = 1; break;
             default:
                 if (out_error) *out_error = dup_error("unexpected character", line, col);
                 free(tokens);

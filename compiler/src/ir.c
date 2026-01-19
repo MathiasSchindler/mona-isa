@@ -18,18 +18,29 @@ void ir_init(IRProgram *ir) {
     ir->count = 0;
     ir->cap = 0;
     ir->temp_count = 0;
+    ir->label_count = 0;
 }
 
 void ir_free(IRProgram *ir) {
+    if (ir->insts) {
+        for (size_t i = 0; i < ir->count; i++) {
+            if (ir->insts[i].op == IR_CALL) free(ir->insts[i].args);
+        }
+    }
     free(ir->insts);
     ir->insts = NULL;
     ir->count = 0;
     ir->cap = 0;
     ir->temp_count = 0;
+    ir->label_count = 0;
+}
+
+int ir_new_temp(IRProgram *ir) {
+    return ir->temp_count++;
 }
 
 int ir_emit_const(IRProgram *ir, long value) {
-    int temp = ir->temp_count++;
+    int temp = ir_new_temp(ir);
     IRInst inst = {0};
     inst.op = IR_CONST;
     inst.dst = temp;
@@ -39,7 +50,7 @@ int ir_emit_const(IRProgram *ir, long value) {
 }
 
 int ir_emit_bin(IRProgram *ir, BinOp op, int lhs, int rhs) {
-    int temp = ir->temp_count++;
+    int temp = ir_new_temp(ir);
     IRInst inst = {0};
     inst.op = IR_BIN;
     inst.dst = temp;
@@ -50,10 +61,75 @@ int ir_emit_bin(IRProgram *ir, BinOp op, int lhs, int rhs) {
     return temp;
 }
 
+void ir_emit_mov(IRProgram *ir, int dst, int src) {
+    IRInst inst = {0};
+    inst.op = IR_MOV;
+    inst.dst = dst;
+    inst.lhs = src;
+    ir_push(ir, inst);
+}
+
 void ir_emit_ret(IRProgram *ir, int value_temp) {
     IRInst inst = {0};
     inst.op = IR_RET;
     inst.lhs = value_temp;
+    ir_push(ir, inst);
+}
+
+void ir_emit_func(IRProgram *ir, const char *name) {
+    IRInst inst = {0};
+    inst.op = IR_FUNC;
+    inst.name = name;
+    ir_push(ir, inst);
+}
+
+void ir_emit_param(IRProgram *ir, int index, int dst) {
+    IRInst inst = {0};
+    inst.op = IR_PARAM;
+    inst.dst = dst;
+    inst.imm = index;
+    ir_push(ir, inst);
+}
+
+int ir_emit_call(IRProgram *ir, const char *name, const int *args, int argc) {
+    int temp = ir_new_temp(ir);
+    IRInst inst = {0};
+    inst.op = IR_CALL;
+    inst.name = name;
+    inst.argc = argc;
+    if (argc > 0) {
+        inst.args = (int *)malloc((size_t)argc * sizeof(int));
+        if (!inst.args) return -1;
+        for (int i = 0; i < argc; i++) inst.args[i] = args[i];
+    }
+    inst.dst = temp;
+    if (!ir_push(ir, inst)) { free(inst.args); return -1; }
+    return temp;
+}
+
+int ir_new_label(IRProgram *ir) {
+    return ir->label_count++;
+}
+
+void ir_emit_label(IRProgram *ir, int label) {
+    IRInst inst = {0};
+    inst.op = IR_LABEL;
+    inst.label = label;
+    ir_push(ir, inst);
+}
+
+void ir_emit_jmp(IRProgram *ir, int label) {
+    IRInst inst = {0};
+    inst.op = IR_JMP;
+    inst.label = label;
+    ir_push(ir, inst);
+}
+
+void ir_emit_bz(IRProgram *ir, int cond_temp, int label) {
+    IRInst inst = {0};
+    inst.op = IR_BZ;
+    inst.lhs = cond_temp;
+    inst.label = label;
     ir_push(ir, inst);
 }
 
@@ -63,6 +139,12 @@ static const char *binop_name(BinOp op) {
         case BIN_SUB: return "sub";
         case BIN_MUL: return "mul";
         case BIN_DIV: return "div";
+        case BIN_EQ: return "eq";
+        case BIN_NEQ: return "neq";
+        case BIN_LT: return "lt";
+        case BIN_LTE: return "lte";
+        case BIN_GT: return "gt";
+        case BIN_GTE: return "gte";
         default: return "?";
     }
 }
@@ -77,8 +159,35 @@ void ir_print(const IRProgram *ir, FILE *out) {
             case IR_BIN:
                 fprintf(out, "t%d = %s t%d, t%d\n", inst->dst, binop_name(inst->bin_op), inst->lhs, inst->rhs);
                 break;
+            case IR_MOV:
+                fprintf(out, "t%d = mov t%d\n", inst->dst, inst->lhs);
+                break;
+            case IR_FUNC:
+                fprintf(out, "func %s\n", inst->name ? inst->name : "<anon>");
+                break;
+            case IR_PARAM:
+                fprintf(out, "t%d = param %ld\n", inst->dst, inst->imm);
+                break;
+            case IR_CALL: {
+                fprintf(out, "t%d = call %s(", inst->dst, inst->name ? inst->name : "<anon>");
+                for (int i = 0; i < inst->argc; i++) {
+                    if (i) fprintf(out, ", ");
+                    fprintf(out, "t%d", inst->args[i]);
+                }
+                fprintf(out, ")\n");
+                break;
+            }
             case IR_RET:
                 fprintf(out, "return t%d\n", inst->lhs);
+                break;
+            case IR_LABEL:
+                fprintf(out, ".L%d:\n", inst->label);
+                break;
+            case IR_JMP:
+                fprintf(out, "jmp .L%d\n", inst->label);
+                break;
+            case IR_BZ:
+                fprintf(out, "bz t%d, .L%d\n", inst->lhs, inst->label);
                 break;
             default:
                 break;

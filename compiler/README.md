@@ -20,6 +20,18 @@ Emit IR for debugging:
 ./minac --emit-ir path/to/file.c
 ```
 
+Emit MINA assembly:
+
+```sh
+./minac --emit-asm path/to/file.c
+```
+
+Assemble and link with `mina-as`:
+
+```sh
+./minac -o out.elf path/to/file.c
+```
+
 ## Tests (C0)
 
 ```sh

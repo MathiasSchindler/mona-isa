@@ -2,7 +2,7 @@ CC ?= clang
 CFLAGS ?= -std=c11 -O2 -Wall -Wextra -Wpedantic
 
 BIN := minac
-SRC := src/main.c src/lexer.c src/parser.c src/ast.c src/ir.c src/lower.c
+SRC := src/main.c src/lexer.c src/parser.c src/ast.c src/ir.c src/lower.c src/codegen.c
 
 all: $(BIN)
 

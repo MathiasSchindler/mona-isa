@@ -63,6 +63,8 @@ Assumption: Use `mina-as` for assembly and linking (yes, that is the intended pa
 - `tests/c3_add.c`: `return 1+2+3;` => exit 6.
 - `tests/c3_mul.c`: `return 6*7;` => exit 42.
 
+**Status:** Done (assembly generation + `-o` to run `mina-as`; simulator halt checks in tests).
+
 ## Milestone C4 — Variables and Assignments
 **Scope**
 - Add local variables, assignment, and simple statements.
@@ -75,6 +77,8 @@ Assumption: Use `mina-as` for assembly and linking (yes, that is the intended pa
 **Tests**
 - `tests/c4_vars.c`: `int main(){ int x=3; int y=4; return x+y; }` => 7.
 - `tests/c4_reassign.c`: reassign and return value.
+
+**Status:** Done (locals lowered to temporaries; assignments update temp bindings).
 
 ## Milestone C5 — Control Flow (if/else, while)
 **Scope**
@@ -89,6 +93,8 @@ Assumption: Use `mina-as` for assembly and linking (yes, that is the intended pa
 - `tests/c5_if.c`: conditional return path.
 - `tests/c5_while.c`: compute sum in loop.
 
+**Status:** Done (if/else/while, comparisons, and branch lowering).
+
 ## Milestone C6 — Function Calls (No Pointers Yet)
 **Scope**
 - Add function definitions and calls with integer arguments.
@@ -101,6 +107,8 @@ Assumption: Use `mina-as` for assembly and linking (yes, that is the intended pa
 **Tests**
 - `tests/c6_call.c`: `add(2,3)` returns 5.
 - `tests/c6_nested.c`: call from another function.
+
+**Status:** Done (multi-function parsing, parameter passing via a0–a7, call/return).
 
 ## Milestone C7 — Global Data and Strings
 **Scope**

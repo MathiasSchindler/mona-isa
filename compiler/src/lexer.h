@@ -7,6 +7,9 @@ typedef enum {
     TOK_EOF = 0,
     TOK_INT,
     TOK_RETURN,
+    TOK_IF,
+    TOK_ELSE,
+    TOK_WHILE,
     TOK_IDENT,
     TOK_NUMBER,
     TOK_LPAREN,
@@ -14,10 +17,18 @@ typedef enum {
     TOK_LBRACE,
     TOK_RBRACE,
     TOK_SEMI,
+    TOK_COMMA,
     TOK_PLUS,
     TOK_MINUS,
     TOK_STAR,
-    TOK_SLASH
+    TOK_SLASH,
+    TOK_ASSIGN,
+    TOK_EQ,
+    TOK_NEQ,
+    TOK_LT,
+    TOK_LTE,
+    TOK_GT,
+    TOK_GTE
 } TokenKind;
 
 typedef struct {
