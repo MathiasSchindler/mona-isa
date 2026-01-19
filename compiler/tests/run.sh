@@ -6,6 +6,7 @@ BIN="$ROOT_DIR/minac"
 AS="$ROOT_DIR/../mina-as/mina-as"
 SIM="$ROOT_DIR/../simulator/mina-sim"
 OUT="$ROOT_DIR/tests/out"
+CLIB_SRC="$ROOT_DIR/../clib/src/clib.c"
 
 mkdir -p "$OUT"
 
@@ -83,6 +84,100 @@ OUT_LOG=$("$SIM" "$OUT/n4_init_struct.elf" 2>&1 || true)
 echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL n4_init_struct_sim" >&2; exit 1; }
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL n4_init_struct_sim" >&2; exit 1; }
 echo "PASS n4_init_struct_sim"
+
+# l0_putchar.c: builtin putchar
+"$BIN" -o "$OUT/l0_putchar.elf" "$ROOT_DIR/tests/l0_putchar.c"
+OUT_LOG=$("$SIM" "$OUT/l0_putchar.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL l0_putchar_sim" >&2; exit 1; }
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l0_putchar_sim" >&2; exit 1; }
+echo "PASS l0_putchar_sim"
+
+# l0_puts.c: builtin puts
+"$BIN" -o "$OUT/l0_puts.elf" "$ROOT_DIR/tests/l0_puts.c"
+OUT_LOG=$("$SIM" "$OUT/l0_puts.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL l0_puts_sim" >&2; exit 1; }
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l0_puts_sim" >&2; exit 1; }
+echo "PASS l0_puts_sim"
+
+# l0_exit.c: builtin exit
+"$BIN" -o "$OUT/l0_exit.elf" "$ROOT_DIR/tests/l0_exit.c"
+OUT_LOG=$("$SIM" "$OUT/l0_exit.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l0_exit_sim" >&2; exit 1; }
+echo "PASS l0_exit_sim"
+
+# l1_header.c: clib.h include
+"$BIN" -o "$OUT/l1_header.elf" "$ROOT_DIR/tests/l1_header.c"
+OUT_LOG=$("$SIM" "$OUT/l1_header.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL l1_header_sim" >&2; exit 1; }
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l1_header_sim" >&2; exit 1; }
+echo "PASS l1_header_sim"
+
+# build clib asm (no start) for L2
+"$BIN" --emit-asm --no-start "$CLIB_SRC" > "$OUT/clib.s"
+sed 's/\.L/\.Lclib/g' "$OUT/clib.s" > "$OUT/clib.lib.s"
+
+# l2_strlen.c: clib strlen
+"$BIN" --emit-asm "$ROOT_DIR/tests/l2_strlen.c" > "$OUT/l2_strlen.s"
+cat "$OUT/l2_strlen.s" "$OUT/clib.lib.s" > "$OUT/l2_strlen_full.s"
+"$AS" --data-base 0x4000 "$OUT/l2_strlen_full.s" -o "$OUT/l2_strlen.elf"
+OUT_LOG=$("$SIM" "$OUT/l2_strlen.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL l2_strlen_sim" >&2; exit 1; }
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l2_strlen_sim" >&2; exit 1; }
+echo "PASS l2_strlen_sim"
+
+# l2_memcpy.c: clib memcpy
+"$BIN" --emit-asm "$ROOT_DIR/tests/l2_memcpy.c" > "$OUT/l2_memcpy.s"
+cat "$OUT/l2_memcpy.s" "$OUT/clib.lib.s" > "$OUT/l2_memcpy_full.s"
+"$AS" --data-base 0x4000 "$OUT/l2_memcpy_full.s" -o "$OUT/l2_memcpy.elf"
+OUT_LOG=$("$SIM" "$OUT/l2_memcpy.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL l2_memcpy_sim" >&2; exit 1; }
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l2_memcpy_sim" >&2; exit 1; }
+echo "PASS l2_memcpy_sim"
+
+# l2_memset.c: clib memset
+"$BIN" --emit-asm "$ROOT_DIR/tests/l2_memset.c" > "$OUT/l2_memset.s"
+cat "$OUT/l2_memset.s" "$OUT/clib.lib.s" > "$OUT/l2_memset_full.s"
+"$AS" --data-base 0x4000 "$OUT/l2_memset_full.s" -o "$OUT/l2_memset.elf"
+OUT_LOG=$("$SIM" "$OUT/l2_memset.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL l2_memset_sim" >&2; exit 1; }
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l2_memset_sim" >&2; exit 1; }
+echo "PASS l2_memset_sim"
+
+# l3_printf.c: clib printf (%s/%c/%d)
+"$BIN" --emit-asm "$ROOT_DIR/tests/l3_printf.c" > "$OUT/l3_printf.s"
+cat "$OUT/l3_printf.s" "$OUT/clib.lib.s" > "$OUT/l3_printf_full.s"
+"$AS" --data-base 0x4000 "$OUT/l3_printf_full.s" -o "$OUT/l3_printf.elf"
+OUT_LOG=$("$SIM" "$OUT/l3_printf.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "S=OK C=O D=123" || { echo "FAIL l3_printf_sim" >&2; exit 1; }
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l3_printf_sim" >&2; exit 1; }
+echo "PASS l3_printf_sim"
+
+# l4_ctype.c: clib isdigit/isalpha/isspace
+"$BIN" --emit-asm "$ROOT_DIR/tests/l4_ctype.c" > "$OUT/l4_ctype.s"
+cat "$OUT/l4_ctype.s" "$OUT/clib.lib.s" > "$OUT/l4_ctype_full.s"
+"$AS" --data-base 0x4000 "$OUT/l4_ctype_full.s" -o "$OUT/l4_ctype.elf"
+OUT_LOG=$("$SIM" "$OUT/l4_ctype.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL l4_ctype_sim" >&2; exit 1; }
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l4_ctype_sim" >&2; exit 1; }
+echo "PASS l4_ctype_sim"
+
+# l5_atoi.c: clib atoi
+"$BIN" --emit-asm "$ROOT_DIR/tests/l5_atoi.c" > "$OUT/l5_atoi.s"
+cat "$OUT/l5_atoi.s" "$OUT/clib.lib.s" > "$OUT/l5_atoi_full.s"
+"$AS" --data-base 0x4000 "$OUT/l5_atoi_full.s" -o "$OUT/l5_atoi.elf"
+OUT_LOG=$("$SIM" "$OUT/l5_atoi.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL l5_atoi_sim" >&2; exit 1; }
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l5_atoi_sim" >&2; exit 1; }
+echo "PASS l5_atoi_sim"
+
+# l5_strtol.c: clib strtol (base 10)
+"$BIN" --emit-asm "$ROOT_DIR/tests/l5_strtol.c" > "$OUT/l5_strtol.s"
+cat "$OUT/l5_strtol.s" "$OUT/clib.lib.s" > "$OUT/l5_strtol_full.s"
+"$AS" --data-base 0x4000 "$OUT/l5_strtol_full.s" -o "$OUT/l5_strtol.elf"
+OUT_LOG=$("$SIM" "$OUT/l5_strtol.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL l5_strtol_sim" >&2; exit 1; }
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l5_strtol_sim" >&2; exit 1; }
+echo "PASS l5_strtol_sim"
 
 # c2_ir.c: should lower and match IR output
 "$BIN" --emit-ir "$ROOT_DIR/tests/c2_ir.c" > "$ROOT_DIR/tests/c2_ir.out"

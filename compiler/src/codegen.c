@@ -141,7 +141,7 @@ static const char *binop_mnemonic(BinOp op) {
     }
 }
 
-int codegen_emit_asm(const IRProgram *ir, FILE *out, char **out_error) {
+int codegen_emit_asm(const IRProgram *ir, FILE *out, int emit_start, char **out_error) {
     if (out_error) *out_error = NULL;
     if (!ir || !out) return 0;
 
@@ -232,6 +232,7 @@ int codegen_emit_asm(const IRProgram *ir, FILE *out, char **out_error) {
                 for (size_t b = 0; b < inst->len; b++) {
                     fprintf(out, "  .byte %u\n", (unsigned char)inst->data[b]);
                 }
+                fprintf(out, "  .byte 0\n");
             } else if (inst->op == IR_GLOBAL_BYTES) {
                 fprintf(out, "%s:\n", inst->name ? inst->name : "<anon>");
                 for (size_t b = 0; b < inst->len; b++) {
@@ -242,11 +243,13 @@ int codegen_emit_asm(const IRProgram *ir, FILE *out, char **out_error) {
     }
 
     fprintf(out, ".text\n");
-    fprintf(out, "start:\n");
-    fprintf(out, "  jal ra, main\n");
-    fprintf(out, "  mov r10, a0\n");
-    fprintf(out, "  li r17, 3\n");
-    fprintf(out, "  ecall\n");
+    if (emit_start) {
+        fprintf(out, "start:\n");
+        fprintf(out, "  jal ra, main\n");
+        fprintf(out, "  mov r10, a0\n");
+        fprintf(out, "  li r17, 3\n");
+        fprintf(out, "  ecall\n");
+    }
 
     const FuncInfo *current = NULL;
     int cur_spill_count = 0;

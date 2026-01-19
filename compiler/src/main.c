@@ -36,7 +36,7 @@ static int run_mina_as_with_mode(const char *as_path, const char *input_s, const
     return system(cmd);
 }
 
-static char *write_temp_asm(const IRProgram *ir, char **out_error) {
+static char *write_temp_asm(const IRProgram *ir, int emit_start, char **out_error) {
 #ifdef __EMSCRIPTEN__
     const char *tmp_path = "/tmp/minac-out.s";
     FILE *f = fopen(tmp_path, "w");
@@ -44,7 +44,7 @@ static char *write_temp_asm(const IRProgram *ir, char **out_error) {
         if (out_error) *out_error = dup_string("error: failed to open temp file");
         return NULL;
     }
-    if (!codegen_emit_asm(ir, f, out_error)) {
+    if (!codegen_emit_asm(ir, f, emit_start, out_error)) {
         fclose(f);
         return NULL;
     }
@@ -63,7 +63,7 @@ static char *write_temp_asm(const IRProgram *ir, char **out_error) {
         if (out_error) *out_error = dup_string("error: failed to open temp file");
         return NULL;
     }
-    if (!codegen_emit_asm(ir, f, out_error)) {
+    if (!codegen_emit_asm(ir, f, emit_start, out_error)) {
         fclose(f);
         unlink(tmpl);
         return NULL;
@@ -79,6 +79,7 @@ int main(int argc, char **argv) {
     int emit_bin = 0;
     int optimize = 0;
     int max_errors = 5;
+        int emit_start = 1;
     const char *output_path = NULL;
     const char *path = NULL;
 
@@ -89,6 +90,8 @@ int main(int argc, char **argv) {
             emit_asm = 1;
         } else if (strcmp(argv[i], "--bin") == 0) {
             emit_bin = 1;
+            } else if (strcmp(argv[i], "--no-start") == 0) {
+                emit_start = 0;
         } else if (strcmp(argv[i], "--max-errors") == 0) {
             if (i + 1 >= argc) { print_usage(argv[0]); return 1; }
             max_errors = atoi(argv[++i]);
@@ -167,7 +170,7 @@ int main(int argc, char **argv) {
     if (output_path) {
         char *asm_path = NULL;
         char *cg_err = NULL;
-        asm_path = write_temp_asm(&ir, &cg_err);
+        asm_path = write_temp_asm(&ir, emit_start, &cg_err);
         if (!asm_path) {
             fprintf(stderr, "%s\n", cg_err ? cg_err : "error: codegen failed");
             free(cg_err);
@@ -193,7 +196,7 @@ int main(int argc, char **argv) {
         }
     } else if (emit_asm || !emit_ir) {
         char *cg_err = NULL;
-        if (!codegen_emit_asm(&ir, stdout, &cg_err)) {
+            if (!codegen_emit_asm(&ir, stdout, emit_start, &cg_err)) {
             fprintf(stderr, "%s\n", cg_err ? cg_err : "error: codegen failed");
             free(cg_err);
             ir_free(&ir);

@@ -23,6 +23,14 @@ Assumptions:
 - `tests/l0_puts.c`: prints a string and exits 0.
 - `tests/l0_exit.c`: exits with non-zero code.
 
+**Behavior (current intrinsics)**
+- `putchar(int c)` writes one byte to stdout via `SYS_WRITE` and returns the write result (bytes written).
+- `puts(const char *s)` writes the bytes of `s` to stdout via `SYS_WRITE` and returns the write result.
+	- Limitation: argument must be a string literal or a global string symbol.
+	- No implicit newline is added.
+- `exit(int code)` invokes `SYS_EXIT` and halts the simulator.
+	- The simulator currently halts on `ebreak` and does not report exit codes separately.
+
 ## Milestone L1 — Tiny libc header + prototypes (separate folder)
 **Scope**
 - Provide a `clib.h` with prototypes for supported functions.
@@ -35,6 +43,11 @@ Assumptions:
 
 **Tests**
 - `tests/l1_header.c`: compile with `#include "clib.h"` and call functions.
+
+**Notes**
+- The preprocessor resolves `#include "clib.h"` against `clib/include/` (in addition to the local file directory).
+- `clib.h` does not use include guards because the preprocessor currently supports only `#include` and `#define`.
+- `const` qualifiers are not supported yet, so `puts` is declared as `int puts(char *s);`.
 
 ## Milestone L2 — String length and memory utilities (library object)
 **Scope**
@@ -50,6 +63,10 @@ Assumptions:
 - `tests/l2_memcpy.c`: copy a buffer and compare bytes.
 - `tests/l2_memset.c`: fill a buffer and verify bytes.
 
+**Notes**
+- The test runner builds `clib/src/clib.c` with `minac --emit-asm --no-start`, then concatenates it with each test’s asm before assembly. This simulates optional linking without a full linker.
+- Current compiler limitations mean the L2 prototypes use `int` sizes and `char *` pointers (no `typedef`, `const`, or `void *` yet).
+
 ## Milestone L3 — Basic formatted output (minimal)
 **Scope**
 - Implement `printf` subset: `%s`, `%c`, `%d`.
@@ -62,6 +79,12 @@ Assumptions:
 **Tests**
 - `tests/l3_printf.c`: check output for string, char, and integer.
 
+**Notes**
+- `printf` is a fixed‑arity wrapper: `int printf(char *fmt, int a, int b, int c)`.
+- `vprintf` accepts a format plus `int *args` and a count; arguments are consumed left‑to‑right.
+- Only `%s`, `%c`, `%d`, and `%%` are supported.
+- Helper functions are non-`static` because the compiler does not support the `static` keyword yet.
+
 ## Milestone L4 — Character classification
 **Scope**
 - Implement a minimal `ctype` subset: `isdigit`, `isalpha`, `isspace`.
@@ -73,6 +96,9 @@ Assumptions:
 **Tests**
 - `tests/l4_ctype.c`: verify expected true/false cases.
 
+**Notes**
+- ASCII-only classification (`A-Z`, `a-z`, `0-9`, space/tab/newline/CR).
+
 ## Milestone L5 — Simple conversion helpers
 **Scope**
 - Implement `atoi` and `strtol` (subset: base 10, no errno).
@@ -83,6 +109,12 @@ Assumptions:
 
 **Tests**
 - `tests/l5_atoi.c`: parse common values and signs.
+
+**Notes**
+- `strtol` is a minimal variant: `int strtol(char *s, int *end, int base)`.
+- Only base 10 is supported; other bases return 0 and set `end` to 0.
+- `end` returns the character index of the first non‑digit (or 0 if `s` is NULL).
+- Clib-linked tests assemble with `--data-base 0x4000` to avoid text/data overlap as the library grows.
 
 ## Milestone L6 — File-descriptor style I/O (optional)
 **Scope**

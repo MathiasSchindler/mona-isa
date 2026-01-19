@@ -160,6 +160,26 @@ static char *join_path(const char *base, const char *rel) {
     return out;
 }
 
+static int can_open_file(const char *path) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+    fclose(f);
+    return 1;
+}
+
+static char *resolve_include_path(const char *base, const char *inc) {
+    char *full = join_path(base, inc);
+    if (full && can_open_file(full)) return full;
+    free(full);
+
+    char rel[512];
+    snprintf(rel, sizeof(rel), "../../clib/include/%s", inc);
+    char *alt = join_path(base, rel);
+    if (alt && can_open_file(alt)) return alt;
+    free(alt);
+    return NULL;
+}
+
 static int append_expanded_line(const char *line, size_t len, MacroTable *macros, Buffer *out) {
     int in_str = 0;
     int in_char = 0;
@@ -241,9 +261,9 @@ static int preprocess_file(const char *path, MacroTable *macros, Buffer *out, ch
                     if (!inc) { if (out_error && !*out_error) *out_error = dup_error("error: out of memory"); free(src); return 0; }
                     memcpy(inc, s, inc_len);
                     inc[inc_len] = '\0';
-                    char *full = join_path(path, inc);
+                    char *full = resolve_include_path(path, inc);
                     free(inc);
-                    if (!full) { if (out_error && !*out_error) *out_error = dup_error("error: include path invalid"); free(src); return 0; }
+                    if (!full) { if (out_error && !*out_error) *out_error = dup_error("error: include not found"); free(src); return 0; }
                     int ok = preprocess_file(full, macros, out, out_error, depth + 1);
                     free(full);
                     if (!ok) { free(src); return 0; }

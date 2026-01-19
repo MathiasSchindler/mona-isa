@@ -1586,6 +1586,17 @@ Program *parse_program(const Token *tokens, size_t count, int max_errors, char *
             size_t param_count = 0;
             if (!parse_params(&p, &params, &param_types, &param_count)) { free(name); free_type_local(type); goto done; }
             if (!expect(&p, TOK_RPAREN, "expected ')'") ) { free(name); free_type_local(type); goto done; }
+            if (match(&p, TOK_SEMI)) {
+                for (size_t i = 0; i < param_count; i++) free(params[i]);
+                free(params);
+                if (param_types) {
+                    for (size_t i = 0; i < param_count; i++) free_type_local(param_types[i]);
+                    free(param_types);
+                }
+                free_type_local(type);
+                free(name);
+                continue;
+            }
             if (!expect(&p, TOK_LBRACE, "expected '{'") ) { free(name); free_type_local(type); goto done; }
             Stmt **stmts = NULL;
             size_t stmt_count = 0;
