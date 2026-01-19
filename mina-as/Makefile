@@ -2,7 +2,7 @@ CC ?= cc
 CFLAGS ?= -std=c11 -O2 -Wall -Wextra -Wpedantic
 
 BIN = mina-as
-SRC = src/main.c
+SRC = src/main.c src/assemble.c src/buffer.c src/elf.c src/encode.c src/labels.c src/lexer.c src/parse.c src/util.c
 SIM = ../simulator/mina-sim
 
 EXAMPLES = tests/src/hello.s tests/src/tensor-mini.s tests/src/99-bottles.s tests/src/uart-echo.s tests/src/csr-test.s tests/src/trap-test.s tests/src/cap-test.s tests/src/syscall-io.s tests/src/factorial-test.s tests/src/fib-test.s tests/src/prime-test.s tests/src/reverse-test.s tests/src/palindrome-test.s tests/src/abi-test.s
