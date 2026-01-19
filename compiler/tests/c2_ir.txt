@@ -1,0 +1,6 @@
+t0 = const 2
+t1 = const 3
+t2 = const 4
+t3 = mul t1, t2
+t4 = add t0, t3
+return t4

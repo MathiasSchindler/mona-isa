@@ -45,6 +45,8 @@ Assumption: Use `mina-as` for assembly and linking (yes, that is the intended pa
 - `tests/c2_ir.c`: compare IR output to golden file.
 - `tests/c2_ir_err.c`: invalid AST cannot be lowered.
 
+**Status:** Done (AST + IR lowering + `--emit-ir`).
+
 ## Milestone C3 — MINA Assembly Codegen
 **Scope**
 - Generate MINA assembly for the IR, using `mina-as` for assembly and linking.
