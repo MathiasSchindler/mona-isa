@@ -24,9 +24,11 @@ This document defines the supported C subset and known limitations of the MINA C
 ### 3.1 Types
 
 - `int`
+- `char`
+- `void` (function return type)
 - `int *` (pointers)
 - Global `int` arrays with constant size and optional constant initializers
-- `char *` only for global string literals
+- `char *` for string literals and pointer operations
 
 ### 3.2 Expressions
 
@@ -34,7 +36,7 @@ This document defines the supported C subset and known limitations of the MINA C
 - Binary ops: `+ - * /`, comparisons `== != < <= > >=`
 - Logical ops: `&& || !` (short-circuit lowering)
 - Unary ops: `+ - & *`
-- Indexing: `a[i]` (scaled by 8 bytes)
+- Indexing: `a[i]` (scaled by element size)
 - Function calls (up to 8 arguments)
 
 ### 3.3 Statements
@@ -55,7 +57,7 @@ This document defines the supported C subset and known limitations of the MINA C
 
 - MINA ABI per [deliverables/abi.md](deliverables/abi.md)
 - Syscalls: `write`, `read`, `exit` (simulator ABI)
-- Built-in `puts` uses `write` with a constant-length buffer
+- Built-ins: `puts`, `putchar`, `exit` (mapped to syscalls)
 
 ---
 
@@ -69,9 +71,8 @@ This document defines the supported C subset and known limitations of the MINA C
 ## 6. Known Limitations
 
 - No `struct`/`union`/`enum`/`typedef`.
-- No `void` return type or `char` scalar type.
 - No arrays of locals (only global `int` arrays).
-- No pointer arithmetic beyond indexing scale-by-8.
+- No pointer arithmetic beyond indexing.
 - No floating-point support.
 - No preprocessor (`#include`, `#define`).
 - No variadic functions.

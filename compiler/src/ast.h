@@ -10,8 +10,43 @@ typedef enum {
     EXPR_UNARY,
     EXPR_CALL,
     EXPR_STRING,
-    EXPR_INDEX
+    EXPR_INDEX,
+    EXPR_SIZEOF,
+    EXPR_FIELD
 } ExprKind;
+
+typedef enum {
+    TYPE_INT,
+    TYPE_CHAR,
+    TYPE_VOID,
+    TYPE_PTR,
+    TYPE_ARRAY,
+    TYPE_STRUCT,
+    TYPE_UNION
+} TypeKind;
+
+typedef struct StructField {
+    char *name;
+    struct Type *type;
+    size_t offset;
+    size_t size;
+} StructField;
+
+typedef struct StructDef {
+    char *name;
+    int is_union;
+    StructField *fields;
+    size_t field_count;
+    size_t size;
+    size_t align;
+} StructDef;
+
+typedef struct Type {
+    TypeKind kind;
+    struct Type *base;
+    size_t array_len;
+    StructDef *def;
+} Type;
 
 typedef enum {
     BIN_ADD,
@@ -65,6 +100,17 @@ typedef struct {
     Expr *index;
 } ExprIndex;
 
+typedef struct {
+    Expr *base;
+    char *field;
+    int is_arrow;
+} ExprField;
+
+typedef struct {
+    Type *type;
+    Expr *expr;
+} ExprSizeof;
+
 struct Expr {
     ExprKind kind;
     int line;
@@ -77,6 +123,8 @@ struct Expr {
         ExprCall call;
         ExprString str;
         ExprIndex index;
+        ExprSizeof sizeof_expr;
+        ExprField field;
     } as;
 };
 
@@ -101,6 +149,7 @@ typedef struct Stmt {
     Expr *lhs;
     Expr *index;
     Expr *cond;
+    Type *decl_type;
     struct Stmt *then_branch;
     struct Stmt *else_branch;
     struct Stmt *body;
@@ -117,13 +166,16 @@ typedef struct Stmt {
 typedef struct Function {
     char *name;
     char **params;
+    Type **param_types;
     size_t param_count;
     Stmt **stmts;
     size_t stmt_count;
+    Type *ret_type;
 } Function;
 
 typedef enum {
     GLOB_INT,
+    GLOB_CHAR,
     GLOB_STR,
     GLOB_INT_ARR
 } GlobalKind;
@@ -134,6 +186,7 @@ typedef struct {
     long value;
     char *data;
     size_t len;
+    Type *type;
 } Global;
 
 typedef struct SwitchCase {
@@ -147,6 +200,8 @@ typedef struct Program {
     size_t func_count;
     Global **globals;
     size_t global_count;
+    StructDef **structs;
+    size_t struct_count;
 } Program;
 
 void free_program(Program *program);

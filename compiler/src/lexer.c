@@ -89,6 +89,8 @@ int lex_all(const char *src, Token **out_tokens, size_t *out_count, char **out_e
             tok.kind = TOK_IDENT;
             if (tok.length == 3 && strncmp(tok.lexeme, "int", 3) == 0) tok.kind = TOK_INT;
             if (tok.length == 4 && strncmp(tok.lexeme, "char", 4) == 0) tok.kind = TOK_CHAR;
+            if (tok.length == 4 && strncmp(tok.lexeme, "void", 4) == 0) tok.kind = TOK_VOID;
+            if (tok.length == 6 && strncmp(tok.lexeme, "sizeof", 6) == 0) tok.kind = TOK_SIZEOF;
             if (tok.length == 3 && strncmp(tok.lexeme, "for", 3) == 0) tok.kind = TOK_FOR;
             if (tok.length == 6 && strncmp(tok.lexeme, "switch", 6) == 0) tok.kind = TOK_SWITCH;
             if (tok.length == 4 && strncmp(tok.lexeme, "case", 4) == 0) tok.kind = TOK_CASE;
@@ -99,6 +101,8 @@ int lex_all(const char *src, Token **out_tokens, size_t *out_count, char **out_e
             if (tok.length == 2 && strncmp(tok.lexeme, "if", 2) == 0) tok.kind = TOK_IF;
             if (tok.length == 4 && strncmp(tok.lexeme, "else", 4) == 0) tok.kind = TOK_ELSE;
             if (tok.length == 5 && strncmp(tok.lexeme, "while", 5) == 0) tok.kind = TOK_WHILE;
+            if (tok.length == 6 && strncmp(tok.lexeme, "struct", 6) == 0) tok.kind = TOK_STRUCT;
+            if (tok.length == 5 && strncmp(tok.lexeme, "union", 5) == 0) tok.kind = TOK_UNION;
             if (!push_token(&tokens, &count, &cap, tok)) goto oom;
             continue;
         }
@@ -152,6 +156,13 @@ int lex_all(const char *src, Token **out_tokens, size_t *out_count, char **out_e
             if (!push_token(&tokens, &count, &cap, tok)) goto oom;
             continue;
         }
+        if (c == '-' && src[i + 1] == '>') {
+            tok.kind = TOK_ARROW;
+            tok.length = 2;
+            i += 2; col += 2;
+            if (!push_token(&tokens, &count, &cap, tok)) goto oom;
+            continue;
+        }
         if (c == '!' ) {
             tok.kind = TOK_NOT;
             tok.length = 1;
@@ -192,6 +203,7 @@ int lex_all(const char *src, Token **out_tokens, size_t *out_count, char **out_e
             case ':' : tok.kind = TOK_COLON; tok.length = 1; break;
             case '[' : tok.kind = TOK_LBRACKET; tok.length = 1; break;
             case ']' : tok.kind = TOK_RBRACKET; tok.length = 1; break;
+            case '.' : tok.kind = TOK_DOT; tok.length = 1; break;
             default:
                 if (out_error) *out_error = dup_error("unexpected character", line, col);
                 free(tokens);

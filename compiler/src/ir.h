@@ -11,15 +11,20 @@ typedef enum {
     IR_MOV,
     IR_ADDR,
     IR_LOAD,
+    IR_LOAD8,
     IR_STORE,
+    IR_STORE8,
     IR_GLOBAL_INT,
+    IR_GLOBAL_CHAR,
     IR_GLOBAL_INT_ARR,
     IR_GLOBAL_STR,
     IR_WRITE,
+    IR_LOCAL_ALLOC,
     IR_FUNC,
     IR_PARAM,
     IR_CALL,
     IR_RET,
+    IR_EXIT,
     IR_LABEL,
     IR_JMP,
     IR_BZ
@@ -59,11 +64,16 @@ void ir_emit_mov(IRProgram *ir, int dst, int src);
 void ir_emit_ret(IRProgram *ir, int value_temp);
 int ir_emit_addr(IRProgram *ir, const char *name);
 int ir_emit_load(IRProgram *ir, int addr_temp);
+int ir_emit_load8(IRProgram *ir, int addr_temp);
 void ir_emit_store(IRProgram *ir, int addr_temp, int value_temp);
+void ir_emit_store8(IRProgram *ir, int addr_temp, int value_temp);
 void ir_emit_global_int(IRProgram *ir, const char *name, long value);
+void ir_emit_global_char(IRProgram *ir, const char *name, unsigned char value);
 void ir_emit_global_int_arr(IRProgram *ir, const char *name, const long *values, size_t count, size_t init_count);
 void ir_emit_global_str(IRProgram *ir, const char *name, const char *data, size_t len);
 int ir_emit_write(IRProgram *ir, int addr_temp, size_t len);
+void ir_emit_local_alloc(IRProgram *ir, const char *name, size_t size);
+void ir_emit_exit(IRProgram *ir, int value_temp);
 void ir_emit_func(IRProgram *ir, const char *name);
 void ir_emit_param(IRProgram *ir, int index, int dst);
 int ir_emit_call(IRProgram *ir, const char *name, const int *args, int argc);

@@ -58,6 +58,25 @@ This document proposes milestones for introducing optional optimization in `mina
 
 **Status:** Done (directive support + ignore rules + line-numbered errors; directives test added).
 
+### A8 — BSS and Zero-Fill
+- Add `.bss` and `.zero` directives for zero-initialized data.
+- Ensure `.bss` does not emit bytes in ELF output.
+- Add tests for `.bss` placement and symbol sizes.
+
+**Status:** Done (`.bss`/`.zero` supported; bss-zero-test added).
+
+### A9 — Includes and Macros
+- Add `.include` support for file reuse.
+- Add a minimal `.macro` / `.endm` facility.
+- Add tests for nested includes and macro expansion.
+
+**Status:** Done (`.include` and `.macro`/`.endm` with argument substitution; include-macro-test added).
+
+### A10 — Debug Info Passthrough
+- Accept and preserve basic debug directives where possible.
+- Emit optional line table info for simulator diagnostics.
+- Add tests that validate debug line mappings.
+
 ## Notes on Refactor Strategy
 
 - Start with minimal interfaces: token stream → instruction IR → encoding.

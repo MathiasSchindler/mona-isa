@@ -22,6 +22,26 @@
 - Provide minimal libc stubs (`puts`, `putchar`, `exit`) over syscalls.
 - Extend statements (`for`, `&&`, `||`, `switch`) and core types (`void`, `char`).
 
+### M11 — C Data Types and Layout
+- Add local arrays, pointer arithmetic, and `sizeof`.
+- Add `struct`/`union` declarations and field access.
+- Validate alignment and layout rules with tests.
+
+### M12 — C Preprocessor (Minimal)
+- Support `#include` and object-like `#define`.
+- Add error handling for missing includes and recursive includes.
+- Add tests for include paths and macro expansion.
+
+### M13 — Assembler Enhancements
+- Add `.bss` and `.zero` support.
+- Add `.include` and a minimal `.macro` / `.endm`.
+- Add debug info passthrough for line mapping.
+
+### M14 — Browser Simulator (Optional, Long-Term)
+- Build the simulator with Emscripten for a web demo.
+- Provide a minimal UI to upload/run `.elf` or `.bin` and view stdout.
+- Document constraints and limitations vs. native execution.
+
 ## Implementation Guidelines
 
 - Prefer small, testable changes and keep behavior backward-compatible.

@@ -102,6 +102,7 @@ static void const_fold_range(IRInst *insts, size_t start, size_t end) {
                 break;
             case IR_ADDR:
             case IR_LOAD:
+            case IR_LOAD8:
             case IR_PARAM:
             case IR_CALL:
             case IR_WRITE:
@@ -122,6 +123,7 @@ static int inst_has_dst(const IRInst *inst) {
         case IR_MOV:
         case IR_ADDR:
         case IR_LOAD:
+        case IR_LOAD8:
         case IR_PARAM:
         case IR_CALL:
         case IR_WRITE:
@@ -134,14 +136,18 @@ static int inst_has_dst(const IRInst *inst) {
 static int inst_has_side_effect(const IRInst *inst) {
     switch (inst->op) {
         case IR_STORE:
+        case IR_STORE8:
         case IR_CALL:
         case IR_WRITE:
         case IR_RET:
+        case IR_EXIT:
+        case IR_LOCAL_ALLOC:
         case IR_LABEL:
         case IR_JMP:
         case IR_BZ:
         case IR_FUNC:
         case IR_GLOBAL_INT:
+        case IR_GLOBAL_CHAR:
         case IR_GLOBAL_STR:
         case IR_GLOBAL_INT_ARR:
             return 1;
@@ -162,11 +168,14 @@ static void collect_uses(const IRInst *inst, int *used, int max) {
             break;
         case IR_MOV:
         case IR_LOAD:
+        case IR_LOAD8:
         case IR_BZ:
         case IR_RET:
+        case IR_EXIT:
             mark_used(used, max, inst->lhs);
             break;
         case IR_STORE:
+        case IR_STORE8:
             mark_used(used, max, inst->lhs);
             mark_used(used, max, inst->rhs);
             break;

@@ -92,6 +92,16 @@ int ir_emit_load(IRProgram *ir, int addr_temp) {
     return temp;
 }
 
+int ir_emit_load8(IRProgram *ir, int addr_temp) {
+    int temp = ir_new_temp(ir);
+    IRInst inst = {0};
+    inst.op = IR_LOAD8;
+    inst.dst = temp;
+    inst.lhs = addr_temp;
+    if (!ir_push(ir, inst)) return -1;
+    return temp;
+}
+
 void ir_emit_store(IRProgram *ir, int addr_temp, int value_temp) {
     IRInst inst = {0};
     inst.op = IR_STORE;
@@ -100,9 +110,25 @@ void ir_emit_store(IRProgram *ir, int addr_temp, int value_temp) {
     ir_push(ir, inst);
 }
 
+void ir_emit_store8(IRProgram *ir, int addr_temp, int value_temp) {
+    IRInst inst = {0};
+    inst.op = IR_STORE8;
+    inst.lhs = addr_temp;
+    inst.rhs = value_temp;
+    ir_push(ir, inst);
+}
+
 void ir_emit_global_int(IRProgram *ir, const char *name, long value) {
     IRInst inst = {0};
     inst.op = IR_GLOBAL_INT;
+    inst.name = name;
+    inst.imm = value;
+    ir_push(ir, inst);
+}
+
+void ir_emit_global_char(IRProgram *ir, const char *name, unsigned char value) {
+    IRInst inst = {0};
+    inst.op = IR_GLOBAL_CHAR;
     inst.name = name;
     inst.imm = value;
     ir_push(ir, inst);
@@ -146,9 +172,24 @@ int ir_emit_write(IRProgram *ir, int addr_temp, size_t len) {
     return temp;
 }
 
+void ir_emit_local_alloc(IRProgram *ir, const char *name, size_t size) {
+    IRInst inst = {0};
+    inst.op = IR_LOCAL_ALLOC;
+    inst.name = name;
+    inst.len = size;
+    ir_push(ir, inst);
+}
+
 void ir_emit_ret(IRProgram *ir, int value_temp) {
     IRInst inst = {0};
     inst.op = IR_RET;
+    inst.lhs = value_temp;
+    ir_push(ir, inst);
+}
+
+void ir_emit_exit(IRProgram *ir, int value_temp) {
+    IRInst inst = {0};
+    inst.op = IR_EXIT;
     inst.lhs = value_temp;
     ir_push(ir, inst);
 }
@@ -244,11 +285,20 @@ void ir_print(const IRProgram *ir, FILE *out) {
             case IR_LOAD:
                 fprintf(out, "t%d = load t%d\n", inst->dst, inst->lhs);
                 break;
+            case IR_LOAD8:
+                fprintf(out, "t%d = load8 t%d\n", inst->dst, inst->lhs);
+                break;
             case IR_STORE:
                 fprintf(out, "store t%d, t%d\n", inst->lhs, inst->rhs);
                 break;
+            case IR_STORE8:
+                fprintf(out, "store8 t%d, t%d\n", inst->lhs, inst->rhs);
+                break;
             case IR_GLOBAL_INT:
                 fprintf(out, "global %s = %ld\n", inst->name ? inst->name : "<anon>", inst->imm);
+                break;
+            case IR_GLOBAL_CHAR:
+                fprintf(out, "global %s = <char:%ld>\n", inst->name ? inst->name : "<anon>", inst->imm);
                 break;
             case IR_GLOBAL_INT_ARR:
                 fprintf(out, "global %s = <intarr:%ld>\n", inst->name ? inst->name : "<anon>", inst->imm);
@@ -258,6 +308,9 @@ void ir_print(const IRProgram *ir, FILE *out) {
                 break;
             case IR_WRITE:
                 fprintf(out, "t%d = write t%d, %zu\n", inst->dst, inst->lhs, inst->len);
+                break;
+            case IR_LOCAL_ALLOC:
+                fprintf(out, "local %s = %zu\n", inst->name ? inst->name : "<anon>", inst->len);
                 break;
             case IR_MOV:
                 fprintf(out, "t%d = mov t%d\n", inst->dst, inst->lhs);
@@ -279,6 +332,9 @@ void ir_print(const IRProgram *ir, FILE *out) {
             }
             case IR_RET:
                 fprintf(out, "return t%d\n", inst->lhs);
+                break;
+            case IR_EXIT:
+                fprintf(out, "exit t%d\n", inst->lhs);
                 break;
             case IR_LABEL:
                 fprintf(out, ".L%d:\n", inst->label);

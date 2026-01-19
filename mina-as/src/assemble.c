@@ -2,6 +2,281 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+typedef enum {
+    SRC_FILE,
+    SRC_LINES
+} SourceKind;
+
+typedef struct {
+    SourceKind kind;
+    FILE *file;
+    bool own_file;
+    char **lines;
+    size_t count;
+    size_t index;
+    int line_no;
+    char dir[512];
+} LineSource;
+
+typedef struct {
+    LineSource *items;
+    size_t count;
+    size_t cap;
+} LineStack;
+
+typedef struct {
+    char **tokens;
+    int count;
+} MacroLine;
+
+typedef struct {
+    char *name;
+    char **params;
+    int param_count;
+    MacroLine *lines;
+    size_t line_count;
+    size_t line_cap;
+} Macro;
+
+typedef struct {
+    Macro *items;
+    size_t count;
+    size_t cap;
+} MacroTable;
+
+static void stack_free(LineStack *stack) {
+    for (size_t i = 0; i < stack->count; i++) {
+        LineSource *src = &stack->items[i];
+        if (src->kind == SRC_FILE && src->file && src->own_file) fclose(src->file);
+        if (src->kind == SRC_LINES && src->lines) {
+            for (size_t l = 0; l < src->count; l++) free(src->lines[l]);
+            free(src->lines);
+        }
+    }
+    free(stack->items);
+    stack->items = NULL;
+    stack->count = 0;
+    stack->cap = 0;
+}
+
+static int stack_push(LineStack *stack, LineSource src) {
+    if (stack->count + 1 > stack->cap) {
+        size_t next = (stack->cap == 0) ? 4 : stack->cap * 2;
+        LineSource *mem = (LineSource *)realloc(stack->items, next * sizeof(LineSource));
+        if (!mem) return 0;
+        stack->items = mem;
+        stack->cap = next;
+    }
+    stack->items[stack->count++] = src;
+    return 1;
+}
+
+static void stack_pop(LineStack *stack) {
+    if (stack->count == 0) return;
+    LineSource *src = &stack->items[stack->count - 1];
+    if (src->kind == SRC_FILE && src->file && src->own_file) fclose(src->file);
+    if (src->kind == SRC_LINES && src->lines) {
+        for (size_t l = 0; l < src->count; l++) free(src->lines[l]);
+        free(src->lines);
+    }
+    stack->count--;
+}
+
+static int stack_next_line(LineStack *stack, char *out, size_t out_cap, LineSource **out_src) {
+    while (stack->count > 0) {
+        LineSource *src = &stack->items[stack->count - 1];
+        if (src->kind == SRC_FILE) {
+            if (!fgets(out, (int)out_cap, src->file)) {
+                stack_pop(stack);
+                continue;
+            }
+            src->line_no++;
+            if (out_src) *out_src = src;
+            return 1;
+        }
+        if (src->kind == SRC_LINES) {
+            if (src->index >= src->count) {
+                stack_pop(stack);
+                continue;
+            }
+            strncpy(out, src->lines[src->index++], out_cap - 1);
+            out[out_cap - 1] = '\0';
+            src->line_no++;
+            if (out_src) *out_src = src;
+            return 1;
+        }
+        stack_pop(stack);
+    }
+    return 0;
+}
+
+static void macro_table_free(MacroTable *table) {
+    for (size_t i = 0; i < table->count; i++) {
+        Macro *m = &table->items[i];
+        free(m->name);
+        for (int p = 0; p < m->param_count; p++) free(m->params[p]);
+        free(m->params);
+        for (size_t l = 0; l < m->line_count; l++) {
+            for (int t = 0; t < m->lines[l].count; t++) free(m->lines[l].tokens[t]);
+            free(m->lines[l].tokens);
+        }
+        free(m->lines);
+    }
+    free(table->items);
+    table->items = NULL;
+    table->count = 0;
+    table->cap = 0;
+}
+
+static Macro *macro_find(MacroTable *table, const char *name) {
+    for (size_t i = 0; i < table->count; i++) {
+        if (strcmp(table->items[i].name, name) == 0) return &table->items[i];
+    }
+    return NULL;
+}
+
+static int macro_add(MacroTable *table, Macro macro) {
+    if (table->count + 1 > table->cap) {
+        size_t next = (table->cap == 0) ? 4 : table->cap * 2;
+        Macro *mem = (Macro *)realloc(table->items, next * sizeof(Macro));
+        if (!mem) return 0;
+        table->items = mem;
+        table->cap = next;
+    }
+    table->items[table->count++] = macro;
+    return 1;
+}
+
+static void get_dirname(const char *path, char *out, size_t out_cap) {
+    if (!path || !*path) { strncpy(out, ".", out_cap); out[out_cap - 1] = '\0'; return; }
+    const char *slash = strrchr(path, '/');
+    if (!slash) { strncpy(out, ".", out_cap); out[out_cap - 1] = '\0'; return; }
+    size_t len = (size_t)(slash - path);
+    if (len >= out_cap) len = out_cap - 1;
+    memcpy(out, path, len);
+    out[len] = '\0';
+}
+
+static int strip_quotes(const char *in, char *out, size_t out_cap) {
+    if (!in || !*in) return 0;
+    size_t len = strlen(in);
+    if (in[0] == '"' && len >= 2 && in[len - 1] == '"') {
+        size_t n = len - 2;
+        if (n >= out_cap) n = out_cap - 1;
+        memcpy(out, in + 1, n);
+        out[n] = '\0';
+        return 1;
+    }
+    strncpy(out, in, out_cap - 1);
+    out[out_cap - 1] = '\0';
+    return 1;
+}
+
+static int resolve_include_path(const char *dir, const char *token, char *out, size_t out_cap) {
+    char tmp[512];
+    if (!strip_quotes(token, tmp, sizeof(tmp))) return 0;
+    if (tmp[0] == '/') {
+        strncpy(out, tmp, out_cap - 1);
+        out[out_cap - 1] = '\0';
+        return 1;
+    }
+    if (!dir || !*dir) dir = ".";
+    snprintf(out, out_cap, "%s/%s", dir, tmp);
+    return 1;
+}
+
+static int macro_capture(LineStack *stack, MacroTable *macros, char *tokens[], int count) {
+    if (count < 2) return 0;
+    Macro macro = {0};
+    macro.name = strdup(tokens[1]);
+    if (!macro.name) return 0;
+    if (count > 2) {
+        macro.param_count = count - 2;
+        macro.params = (char **)calloc((size_t)macro.param_count, sizeof(char *));
+        if (!macro.params) return 0;
+        for (int i = 0; i < macro.param_count; i++) {
+            macro.params[i] = strdup(tokens[i + 2]);
+            if (!macro.params[i]) return 0;
+        }
+    }
+
+    char line[MAX_LINE];
+    LineSource *cur = NULL;
+    while (stack_next_line(stack, line, sizeof(line), &cur)) {
+        strip_comment(line);
+        char *ltokens[MAX_TOKENS];
+        int lcount = tokenize(line, ltokens, MAX_TOKENS);
+        if (lcount == 0) continue;
+        if (strcmp(ltokens[0], ".endm") == 0) break;
+        if (macro.line_count + 1 > macro.line_cap) {
+            size_t next = (macro.line_cap == 0) ? 8 : macro.line_cap * 2;
+            MacroLine *mem = (MacroLine *)realloc(macro.lines, next * sizeof(MacroLine));
+            if (!mem) return 0;
+            macro.lines = mem;
+            macro.line_cap = next;
+        }
+        MacroLine *ml = &macro.lines[macro.line_count++];
+        ml->count = lcount;
+        ml->tokens = (char **)calloc((size_t)lcount, sizeof(char *));
+        if (!ml->tokens) return 0;
+        for (int i = 0; i < lcount; i++) {
+            ml->tokens[i] = strdup(ltokens[i]);
+            if (!ml->tokens[i]) return 0;
+        }
+    }
+
+    if (!macro_add(macros, macro)) return 0;
+    return 1;
+}
+
+static int macro_expand(LineStack *stack, Macro *macro, char *tokens[], int count) {
+    size_t out_count = macro->line_count;
+    char **lines = (char **)calloc(out_count, sizeof(char *));
+    if (!lines) return 0;
+    for (size_t i = 0; i < out_count; i++) {
+        MacroLine *ml = &macro->lines[i];
+        size_t cap = 0;
+        size_t len = 0;
+        char *buf = NULL;
+        for (int t = 0; t < ml->count; t++) {
+            const char *tok = ml->tokens[t];
+            const char *rep = tok;
+            for (int p = 0; p < macro->param_count; p++) {
+                if (strcmp(tok, macro->params[p]) == 0) {
+                    int arg_index = p + 1;
+                    if (arg_index < count) rep = tokens[arg_index];
+                    else rep = "";
+                    break;
+                }
+            }
+            size_t rlen = strlen(rep);
+            size_t need = len + rlen + 2;
+            if (need > cap) {
+                size_t next = (cap == 0) ? 64 : cap * 2;
+                while (next < need) next *= 2;
+                char *mem = (char *)realloc(buf, next);
+                if (!mem) { free(buf); return 0; }
+                buf = mem;
+                cap = next;
+            }
+            if (len > 0) buf[len++] = ' ';
+            memcpy(buf + len, rep, rlen);
+            len += rlen;
+            buf[len] = '\0';
+        }
+        lines[i] = buf ? buf : strdup("");
+        if (!lines[i]) return 0;
+    }
+    LineSource src = {0};
+    src.kind = SRC_LINES;
+    src.lines = lines;
+    src.count = out_count;
+    src.index = 0;
+    src.line_no = 0;
+    src.dir[0] = '\0';
+    return stack_push(stack, src);
+}
 static int is_section_directive(char *tokens[], int count, SectionKind *out) {
     if (count == 0 || tokens[0][0] != '.') return 0;
     if (strcmp(tokens[0], ".text") == 0) { *out = SEC_TEXT; return 1; }
@@ -64,6 +339,15 @@ int emit_directive(Section *sec, SectionKind kind, char *tokens[], int count) {
         for (int i = 1; i < count; i++) {
             int64_t v; if (!parse_int(tokens[i], &v)) return 0;
             if (kind != SEC_BSS) buf_write_u8(&sec->buf, (uint8_t)v);
+            sec->pc++;
+        }
+        return 1;
+    }
+    if (strcmp(tokens[0], ".zero") == 0 && count >= 2) {
+        int64_t v; if (!parse_int(tokens[1], &v)) return 0;
+        if (v < 0) return 0;
+        for (int64_t i = 0; i < v; i++) {
+            if (kind != SEC_BSS) buf_write_u8(&sec->buf, 0);
             sec->pc++;
         }
         return 1;
@@ -386,12 +670,22 @@ int assemble_line(Section *sec, SectionKind kind, char *tokens[], int count, con
     return 0;
 }
 
-int first_pass(FILE *f, LabelTable *labels, const AsmOptions *opt) {
+int first_pass(FILE *f, const char *path, LabelTable *labels, const AsmOptions *opt) {
     char line[MAX_LINE];
     SectionKind cur = SEC_TEXT;
     uint64_t text_pc = 0, data_pc = 0, bss_pc = 0;
     bool skip_unreachable = false;
-    while (fgets(line, sizeof(line), f)) {
+    LineStack stack = {0};
+    MacroTable macros = {0};
+    LineSource root = {0};
+    root.kind = SRC_FILE;
+    root.file = f;
+    root.own_file = false;
+    root.line_no = 0;
+    get_dirname(path, root.dir, sizeof(root.dir));
+    if (!stack_push(&stack, root)) return 0;
+    LineSource *src = NULL;
+    while (stack_next_line(&stack, line, sizeof(line), &src)) {
         strip_comment(line);
         char *tokens[MAX_TOKENS];
         int count = tokenize(line, tokens, MAX_TOKENS);
@@ -405,6 +699,30 @@ int first_pass(FILE *f, LabelTable *labels, const AsmOptions *opt) {
             count--;
             if (count == 0) { skip_unreachable = false; continue; }
             skip_unreachable = false;
+        }
+
+        if (strcmp(tokens[0], ".include") == 0 && count >= 2) {
+            char inc_path[512];
+            if (!resolve_include_path(src ? src->dir : ".", tokens[1], inc_path, sizeof(inc_path))) { stack_free(&stack); macro_table_free(&macros); return 0; }
+            FILE *inc = fopen(inc_path, "r");
+            if (!inc) { stack_free(&stack); macro_table_free(&macros); return 0; }
+            LineSource inc_src = {0};
+            inc_src.kind = SRC_FILE;
+            inc_src.file = inc;
+            inc_src.own_file = true;
+            inc_src.line_no = 0;
+            get_dirname(inc_path, inc_src.dir, sizeof(inc_src.dir));
+            if (!stack_push(&stack, inc_src)) { fclose(inc); stack_free(&stack); macro_table_free(&macros); return 0; }
+            continue;
+        }
+        if (strcmp(tokens[0], ".macro") == 0) {
+            if (!macro_capture(&stack, &macros, tokens, count)) { stack_free(&stack); macro_table_free(&macros); return 0; }
+            continue;
+        }
+        Macro *macro = macro_find(&macros, tokens[0]);
+        if (macro) {
+            if (!macro_expand(&stack, macro, tokens, count)) { stack_free(&stack); macro_table_free(&macros); return 0; }
+            continue;
         }
 
         SectionKind next;
@@ -431,6 +749,10 @@ int first_pass(FILE *f, LabelTable *labels, const AsmOptions *opt) {
                 if (v < 0) return 0;
                 uint64_t align = (v >= 63) ? (1ull << 63) : (1ull << v);
                 *pc = align_up(*pc, align);
+            } else if (strcmp(tokens[0], ".zero") == 0 && count >= 2) {
+                int64_t v; if (!parse_int(tokens[1], &v)) return 0;
+                if (v < 0) return 0;
+                *pc += (uint64_t)v;
             } else if (strcmp(tokens[0], ".byte") == 0) *pc += (uint64_t)(count - 1);
             else if (strcmp(tokens[0], ".half") == 0) *pc += (uint64_t)(2 * (count - 1));
             else if (strcmp(tokens[0], ".word") == 0) *pc += (uint64_t)(4 * (count - 1));
@@ -461,6 +783,8 @@ int first_pass(FILE *f, LabelTable *labels, const AsmOptions *opt) {
             }
         }
     }
+    stack_free(&stack);
+    macro_table_free(&macros);
     return 1;
 }
 
@@ -468,7 +792,7 @@ int assemble_file(const char *in_path, const char *out_path, bool elf_output, co
     FILE *f = fopen(in_path, "r");
     if (!f) return 0;
     LabelTable labels = {0};
-    if (!first_pass(f, &labels, opt)) { fclose(f); return 0; }
+    if (!first_pass(f, in_path, &labels, opt)) { fclose(f); return 0; }
     rewind(f);
 
     Section text = {0}, data = {0}, bss = {0};
@@ -484,8 +808,18 @@ int assemble_file(const char *in_path, const char *out_path, bool elf_output, co
     int ok = 1;
     int line_no = 0;
     bool skip_unreachable = false;
-    while (fgets(line, sizeof(line), f)) {
-        line_no++;
+    LineStack stack = {0};
+    MacroTable macros = {0};
+    LineSource root = {0};
+    root.kind = SRC_FILE;
+    root.file = f;
+    root.own_file = false;
+    root.line_no = 0;
+    get_dirname(in_path, root.dir, sizeof(root.dir));
+    if (!stack_push(&stack, root)) { fclose(f); return 0; }
+    LineSource *src = NULL;
+    while (stack_next_line(&stack, line, sizeof(line), &src)) {
+        line_no = src ? src->line_no : line_no + 1;
         strip_comment(line);
         char *tokens[MAX_TOKENS];
         int count = tokenize(line, tokens, MAX_TOKENS);
@@ -496,6 +830,30 @@ int assemble_file(const char *in_path, const char *out_path, bool elf_output, co
             count--;
             if (count == 0) { skip_unreachable = false; continue; }
             skip_unreachable = false;
+        }
+
+        if (strcmp(tokens[0], ".include") == 0 && count >= 2) {
+            char inc_path[512];
+            if (!resolve_include_path(src ? src->dir : ".", tokens[1], inc_path, sizeof(inc_path))) { ok = 0; break; }
+            FILE *inc = fopen(inc_path, "r");
+            if (!inc) { ok = 0; break; }
+            LineSource inc_src = {0};
+            inc_src.kind = SRC_FILE;
+            inc_src.file = inc;
+            inc_src.own_file = true;
+            inc_src.line_no = 0;
+            get_dirname(inc_path, inc_src.dir, sizeof(inc_src.dir));
+            if (!stack_push(&stack, inc_src)) { fclose(inc); ok = 0; break; }
+            continue;
+        }
+        if (strcmp(tokens[0], ".macro") == 0) {
+            if (!macro_capture(&stack, &macros, tokens, count)) { ok = 0; break; }
+            continue;
+        }
+        Macro *macro = macro_find(&macros, tokens[0]);
+        if (macro) {
+            if (!macro_expand(&stack, macro, tokens, count)) { ok = 0; break; }
+            continue;
         }
 
         SectionKind next;
@@ -521,6 +879,8 @@ int assemble_file(const char *in_path, const char *out_path, bool elf_output, co
         }
     }
     fclose(f);
+    stack_free(&stack);
+    macro_table_free(&macros);
 
     if (!ok) { free(text.buf.data); free(data.buf.data); return 0; }
 

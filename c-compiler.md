@@ -176,8 +176,55 @@ Assumption: Use `mina-as` for assembly and linking (yes, that is the intended pa
 - `tests/c10_ptr.c`: pointer write (`*p = ...`) with local address-taking.
 - `tests/c10_addr.c`: local address-taking (`&x`) and read via pointer.
 - `tests/c10_nested.c`: nested loops with `break`/`continue`.
+- `tests/c10_void.c`: void return path.
+- `tests/c10_putchar.c`: `putchar` builtin.
+- `tests/c10_char.c`: `char` load/store via pointer.
+- `tests/c10_exit.c`: `exit` builtin.
 
-**Status:** Done (spills, pointers/arrays, `for`/`switch`/`break`/`continue`, `&&`/`||`, array indexing). Partial for libc stubs/types (only `puts` exists; `void`, `char` types not yet implemented).
+**Status:** Done (spills, pointers/arrays, `for`/`switch`/`break`/`continue`, `&&`/`||`, array indexing, `void`/`char`, `puts`/`putchar`/`exit`).
+
+## Milestone C11 — Local Arrays and Pointer Arithmetic
+**Scope**
+- Add local arrays and pointer arithmetic (including `sizeof`).
+
+**Implementation Steps**
+1. Add local array declarations and indexing.
+2. Implement pointer arithmetic and `sizeof` for core types.
+3. Extend type checking to prevent invalid arithmetic.
+
+**Tests**
+- `tests/c11_ptrarith.c`: local array indexing via pointer arithmetic.
+- `tests/c11_sizeof.c`: `sizeof` on arrays, pointers, and `char`.
+
+**Status:** Done (local arrays, pointer arithmetic scaling, `sizeof` lowering).
+
+## Milestone C12 — Structs and Unions
+**Scope**
+- Add basic `struct`/`union` types and field access.
+
+**Implementation Steps**
+1. Parse struct/union declarations and field layouts.
+2. Implement field access (`.` and `->`).
+3. Emit correct loads/stores with alignment.
+
+**Tests**
+- `tests/c12_struct.c`: struct initialization and field access.
+- `tests/c12_union.c`: union field overlap behavior.
+
+**Status:** Done (struct/union definitions, field access with `.`/`->`, alignment/size).
+
+## Milestone C13 — Minimal Preprocessor
+**Scope**
+- Add a tiny preprocessor for `#include` and simple `#define`.
+
+**Implementation Steps**
+1. Implement line-based includes.
+2. Implement object-like macro substitution.
+3. Add error handling for missing includes.
+
+**Tests**
+- `tests/c13_include.c`: include a small header.
+- `tests/c13_define.c`: macro substitution.
 
 ## Tooling Notes
 - Use `mina-as` for assembling and linking `.elf` output.

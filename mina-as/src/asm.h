@@ -83,7 +83,7 @@ int64_t resolve_imm(const char *s, const LabelTable *labels, uint64_t pc, int is
 
 int emit_directive(Section *sec, SectionKind kind, char *tokens[], int count);
 int assemble_line(Section *sec, SectionKind kind, char *tokens[], int count, const LabelTable *labels);
-int first_pass(FILE *f, LabelTable *labels, const AsmOptions *opt);
+int first_pass(FILE *f, const char *path, LabelTable *labels, const AsmOptions *opt);
 int assemble_file(const char *in_path, const char *out_path, bool elf_output, const AsmOptions *opt);
 
 void optimize_text_section(Section *text);

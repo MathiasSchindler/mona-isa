@@ -1,6 +1,25 @@
 #include "ast.h"
 #include <stdlib.h>
 
+static void free_type(Type *type) {
+    if (!type) return;
+    if (type->base) free_type(type->base);
+    free(type);
+}
+
+static void free_struct_def(StructDef *def) {
+    if (!def) return;
+    free(def->name);
+    if (def->fields) {
+        for (size_t i = 0; i < def->field_count; i++) {
+            free(def->fields[i].name);
+            if (def->fields[i].type) free_type(def->fields[i].type);
+        }
+        free(def->fields);
+    }
+    free(def);
+}
+
 static void free_expr(Expr *expr) {
     if (!expr) return;
     switch (expr->kind) {
@@ -26,6 +45,14 @@ static void free_expr(Expr *expr) {
             free_expr(expr->as.index.base);
             free_expr(expr->as.index.index);
             break;
+        case EXPR_FIELD:
+            free_expr(expr->as.field.base);
+            free(expr->as.field.field);
+            break;
+        case EXPR_SIZEOF:
+            if (expr->as.sizeof_expr.type) free_type(expr->as.sizeof_expr.type);
+            if (expr->as.sizeof_expr.expr) free_expr(expr->as.sizeof_expr.expr);
+            break;
         case EXPR_NUMBER:
         default:
             break;
@@ -45,6 +72,7 @@ static void free_stmt(Stmt *stmt) {
     if (stmt->body) free_stmt(stmt->body);
     if (stmt->init) free_stmt(stmt->init);
     if (stmt->post) free_stmt(stmt->post);
+    if (stmt->decl_type) free_type(stmt->decl_type);
     if (stmt->stmts) {
         for (size_t i = 0; i < stmt->stmt_count; i++) free_stmt(stmt->stmts[i]);
         free(stmt->stmts);
@@ -68,6 +96,11 @@ static void free_function(Function *func) {
     free(func->name);
     for (size_t i = 0; i < func->param_count; i++) free(func->params[i]);
     free(func->params);
+    if (func->param_types) {
+        for (size_t i = 0; i < func->param_count; i++) free_type(func->param_types[i]);
+        free(func->param_types);
+    }
+    if (func->ret_type) free_type(func->ret_type);
     for (size_t i = 0; i < func->stmt_count; i++) {
         free_stmt(func->stmts[i]);
     }
@@ -77,6 +110,12 @@ static void free_function(Function *func) {
 
 void free_program(Program *program) {
     if (!program) return;
+    if (program->structs) {
+        for (size_t i = 0; i < program->struct_count; i++) {
+            free_struct_def(program->structs[i]);
+        }
+        free(program->structs);
+    }
     for (size_t i = 0; i < program->func_count; i++) {
         free_function(program->funcs[i]);
     }
@@ -86,6 +125,7 @@ void free_program(Program *program) {
         if (!g) continue;
         free(g->name);
         free(g->data);
+        if (g->type) free_type(g->type);
         free(g);
     }
     free(program->globals);

@@ -8,6 +8,9 @@ typedef struct {
     size_t count;
     size_t pos;
     char *error;
+    StructDef **structs;
+    size_t struct_count;
+    size_t struct_cap;
 } Parser;
 
 static char *dup_error_at(const Token *tok, const char *msg) {
@@ -62,6 +65,63 @@ static char *dup_string(const char *s) {
     return out;
 }
 
+static StructDef *find_struct_def(Parser *p, const char *name, int is_union) {
+    if (!p || !name) return NULL;
+    for (size_t i = 0; i < p->struct_count; i++) {
+        StructDef *def = p->structs[i];
+        if (!def) continue;
+        if (def->is_union != is_union) continue;
+        if (strcmp(def->name, name) == 0) return def;
+    }
+    return NULL;
+}
+
+static int add_struct_def(Parser *p, StructDef *def) {
+    if (!p || !def) return 0;
+    if (p->struct_count + 1 > p->struct_cap) {
+        size_t next = (p->struct_cap == 0) ? 8 : p->struct_cap * 2;
+        StructDef **mem = (StructDef **)realloc(p->structs, next * sizeof(StructDef *));
+        if (!mem) return 0;
+        p->structs = mem;
+        p->struct_cap = next;
+    }
+    p->structs[p->struct_count++] = def;
+    return 1;
+}
+
+static size_t type_align(const Type *type) {
+    if (!type) return 8;
+    if (type->kind == TYPE_CHAR) return 1;
+    if (type->kind == TYPE_STRUCT || type->kind == TYPE_UNION) {
+        return type->def ? (type->def->align ? type->def->align : 1) : 1;
+    }
+    if (type->kind == TYPE_ARRAY) return type_align(type->base);
+    return 8;
+}
+
+static size_t align_up_size(size_t v, size_t a) {
+    if (a == 0) return v;
+    size_t m = a - 1;
+    return (v + m) & ~m;
+}
+
+static size_t type_size_local(const Type *type) {
+    if (!type) return 8;
+    switch (type->kind) {
+        case TYPE_CHAR:
+            return 1;
+        case TYPE_VOID:
+            return 0;
+        case TYPE_ARRAY:
+            return type_size_local(type->base) * type->array_len;
+        case TYPE_STRUCT:
+        case TYPE_UNION:
+            return type->def ? type->def->size : 0;
+        default:
+            return 8;
+    }
+}
+
 static Expr *new_expr(ExprKind kind, int line, int col) {
     Expr *expr = (Expr *)calloc(1, sizeof(Expr));
     if (!expr) return NULL;
@@ -69,6 +129,20 @@ static Expr *new_expr(ExprKind kind, int line, int col) {
     expr->line = line;
     expr->col = col;
     return expr;
+}
+
+static Type *new_type(TypeKind kind, Type *base) {
+    Type *type = (Type *)calloc(1, sizeof(Type));
+    if (!type) return NULL;
+    type->kind = kind;
+    type->base = base;
+    return type;
+}
+
+static void free_type_local(Type *type) {
+    if (!type) return;
+    if (type->base) free_type_local(type->base);
+    free(type);
 }
 
 static void free_expr_local(Expr *expr) {
@@ -95,6 +169,14 @@ static void free_expr_local(Expr *expr) {
         case EXPR_INDEX:
             free_expr_local(expr->as.index.base);
             free_expr_local(expr->as.index.index);
+            break;
+        case EXPR_FIELD:
+            free_expr_local(expr->as.field.base);
+            free(expr->as.field.field);
+            break;
+        case EXPR_SIZEOF:
+            if (expr->as.sizeof_expr.type) free_type_local(expr->as.sizeof_expr.type);
+            if (expr->as.sizeof_expr.expr) free_expr_local(expr->as.sizeof_expr.expr);
             break;
         case EXPR_NUMBER:
         default:
@@ -152,6 +234,7 @@ static void free_stmt_local(Stmt *stmt) {
     if (stmt->body) free_stmt_local(stmt->body);
     if (stmt->init) free_stmt_local(stmt->init);
     if (stmt->post) free_stmt_local(stmt->post);
+    if (stmt->decl_type) free_type_local(stmt->decl_type);
     if (stmt->stmts) {
         for (size_t i = 0; i < stmt->stmt_count; i++) free_stmt_local(stmt->stmts[i]);
         free(stmt->stmts);
@@ -175,6 +258,11 @@ static void free_function_local(Function *func) {
     free(func->name);
     for (size_t i = 0; i < func->param_count; i++) free(func->params[i]);
     free(func->params);
+    if (func->param_types) {
+        for (size_t i = 0; i < func->param_count; i++) free_type_local(func->param_types[i]);
+        free(func->param_types);
+    }
+    if (func->ret_type) free_type_local(func->ret_type);
     for (size_t i = 0; i < func->stmt_count; i++) free_stmt_local(func->stmts[i]);
     free(func->stmts);
     free(func);
@@ -188,6 +276,140 @@ static Function *new_function(char *name) {
 }
 
 static Expr *parse_expr(Parser *p);
+
+static Type *parse_type(Parser *p) {
+    Type *base = NULL;
+    if (match(p, TOK_INT)) base = new_type(TYPE_INT, NULL);
+    else if (match(p, TOK_CHAR)) base = new_type(TYPE_CHAR, NULL);
+    else if (match(p, TOK_VOID)) base = new_type(TYPE_VOID, NULL);
+    else if (match(p, TOK_STRUCT) || match(p, TOK_UNION)) {
+        const Token *kw = p->tokens + (p->pos - 1);
+        int is_union = (kw->kind == TOK_UNION);
+        if (peek(p)->kind != TOK_IDENT) {
+            if (!p->error) p->error = dup_error_at(peek(p), "expected struct/union name");
+            return NULL;
+        }
+        char *name = dup_lexeme(peek(p));
+        if (!name) { p->error = dup_error_at(peek(p), "out of memory"); return NULL; }
+        advance(p);
+
+        StructDef *def = find_struct_def(p, name, is_union);
+        if (match(p, TOK_LBRACE)) {
+            if (def && def->field_count > 0) {
+                free(name);
+                if (!p->error) p->error = dup_error_at(peek(p), "struct/union redefinition");
+                return NULL;
+            }
+            if (!def) {
+                def = (StructDef *)calloc(1, sizeof(StructDef));
+                if (!def) { free(name); p->error = dup_error_at(peek(p), "out of memory"); return NULL; }
+                def->name = name;
+                def->is_union = is_union;
+                if (!add_struct_def(p, def)) {
+                    free(def->name);
+                    free(def);
+                    p->error = dup_error_at(peek(p), "out of memory");
+                    return NULL;
+                }
+            } else {
+                free(name);
+            }
+
+            StructField *fields = NULL;
+            size_t field_count = 0;
+            size_t field_cap = 0;
+            size_t offset = 0;
+            size_t max_align = 1;
+            size_t max_size = 0;
+            while (peek(p)->kind != TOK_RBRACE && peek(p)->kind != TOK_EOF) {
+                Type *ftype = parse_type(p);
+                if (!ftype) { p->error = dup_error_at(peek(p), "expected field type"); goto struct_fail; }
+                if (ftype->kind == TYPE_VOID) { free_type_local(ftype); p->error = dup_error_at(peek(p), "void field not supported"); goto struct_fail; }
+                if (peek(p)->kind != TOK_IDENT) { free_type_local(ftype); p->error = dup_error_at(peek(p), "expected field name"); goto struct_fail; }
+                char *fname = dup_lexeme(peek(p));
+                if (!fname) { free_type_local(ftype); p->error = dup_error_at(peek(p), "out of memory"); goto struct_fail; }
+                advance(p);
+                if (match(p, TOK_LBRACKET)) {
+                    if (peek(p)->kind != TOK_NUMBER) { free(fname); free_type_local(ftype); p->error = dup_error_at(peek(p), "expected array size"); goto struct_fail; }
+                    long count = peek(p)->value;
+                    advance(p);
+                    if (!expect(p, TOK_RBRACKET, "expected ']'")) { free(fname); free_type_local(ftype); goto struct_fail; }
+                    Type *arr = new_type(TYPE_ARRAY, ftype);
+                    if (!arr) { free(fname); free_type_local(ftype); p->error = dup_error_at(peek(p), "out of memory"); goto struct_fail; }
+                    arr->array_len = (size_t)count;
+                    ftype = arr;
+                }
+                if (!expect(p, TOK_SEMI, "expected ';' after field")) { free(fname); free_type_local(ftype); goto struct_fail; }
+
+                if (field_count + 1 > field_cap) {
+                    size_t next = (field_cap == 0) ? 4 : field_cap * 2;
+                    StructField *mem = (StructField *)realloc(fields, next * sizeof(StructField));
+                    if (!mem) { free(fname); free_type_local(ftype); p->error = dup_error_at(peek(p), "out of memory"); goto struct_fail; }
+                    fields = mem;
+                    field_cap = next;
+                }
+                size_t fsize = type_size_local(ftype);
+                size_t falign = type_align(ftype);
+                if (def->is_union) {
+                    fields[field_count].offset = 0;
+                    if (fsize > max_size) max_size = fsize;
+                } else {
+                    offset = align_up_size(offset, falign);
+                    fields[field_count].offset = offset;
+                    offset += fsize;
+                }
+                if (falign > max_align) max_align = falign;
+                fields[field_count].name = fname;
+                fields[field_count].type = ftype;
+                fields[field_count].size = fsize;
+                field_count++;
+                continue;
+
+struct_fail:
+                for (size_t i = 0; i < field_count; i++) {
+                    free(fields[i].name);
+                    if (fields[i].type) free_type_local(fields[i].type);
+                }
+                free(fields);
+                return NULL;
+            }
+            if (!expect(p, TOK_RBRACE, "expected '}'")) {
+                for (size_t i = 0; i < field_count; i++) {
+                    free(fields[i].name);
+                    if (fields[i].type) free_type_local(fields[i].type);
+                }
+                free(fields);
+                return NULL;
+            }
+            def->fields = fields;
+            def->field_count = field_count;
+            def->align = max_align;
+            if (def->is_union) {
+                def->size = align_up_size(max_size, max_align);
+            } else {
+                def->size = align_up_size(offset, max_align);
+            }
+        } else {
+            if (!def) {
+                free(name);
+                if (!p->error) p->error = dup_error_at(peek(p), "unknown struct/union");
+                return NULL;
+            }
+            free(name);
+        }
+
+        base = new_type(is_union ? TYPE_UNION : TYPE_STRUCT, NULL);
+        if (!base) { p->error = dup_error_at(peek(p), "out of memory"); return NULL; }
+        base->def = def;
+    }
+    if (!base) return NULL;
+    while (match(p, TOK_STAR)) {
+        Type *ptr = new_type(TYPE_PTR, base);
+        if (!ptr) { free_type_local(base); return NULL; }
+        base = ptr;
+    }
+    return base;
+}
 
 static int decode_string(const Token *tok, char **out_data, size_t *out_len, char **out_error) {
     if (tok->kind != TOK_STRING || tok->length < 2) return 0;
@@ -326,6 +548,24 @@ static Expr *parse_postfix(Parser *p) {
             expr = ind;
             continue;
         }
+        if (match(p, TOK_DOT) || match(p, TOK_ARROW)) {
+            const Token *op = p->tokens + (p->pos - 1);
+            if (peek(p)->kind != TOK_IDENT) {
+                free_expr_local(expr);
+                if (!p->error) p->error = dup_error_at(peek(p), "expected field name");
+                return NULL;
+            }
+            char *fname = dup_lexeme(peek(p));
+            if (!fname) { free_expr_local(expr); p->error = dup_error_at(peek(p), "out of memory"); return NULL; }
+            advance(p);
+            Expr *field = new_expr(EXPR_FIELD, op->line, op->col);
+            if (!field) { free_expr_local(expr); free(fname); return NULL; }
+            field->as.field.base = expr;
+            field->as.field.field = fname;
+            field->as.field.is_arrow = (op->kind == TOK_ARROW);
+            expr = field;
+            continue;
+        }
         break;
     }
     return expr;
@@ -333,6 +573,30 @@ static Expr *parse_postfix(Parser *p) {
 
 static Expr *parse_unary(Parser *p) {
     const Token *tok = peek(p);
+    if (match(p, TOK_SIZEOF)) {
+        Expr *expr = new_expr(EXPR_SIZEOF, tok->line, tok->col);
+        if (!expr) return NULL;
+        expr->as.sizeof_expr.type = NULL;
+        expr->as.sizeof_expr.expr = NULL;
+        if (match(p, TOK_LPAREN)) {
+            if (peek(p)->kind == TOK_INT || peek(p)->kind == TOK_CHAR || peek(p)->kind == TOK_VOID || peek(p)->kind == TOK_STRUCT || peek(p)->kind == TOK_UNION) {
+                Type *type = parse_type(p);
+                if (!type) { free_expr_local(expr); return NULL; }
+                if (!expect(p, TOK_RPAREN, "expected ')'")) { free_type_local(type); free_expr_local(expr); return NULL; }
+                expr->as.sizeof_expr.type = type;
+                return expr;
+            }
+            Expr *inner = parse_expr(p);
+            if (!inner) { free_expr_local(expr); return NULL; }
+            if (!expect(p, TOK_RPAREN, "expected ')'")) { free_expr_local(inner); free_expr_local(expr); return NULL; }
+            expr->as.sizeof_expr.expr = inner;
+            return expr;
+        }
+        Expr *inner = parse_unary(p);
+        if (!inner) { free_expr_local(expr); return NULL; }
+        expr->as.sizeof_expr.expr = inner;
+        return expr;
+    }
     if (match(p, TOK_PLUS) || match(p, TOK_MINUS) || match(p, TOK_NOT) || match(p, TOK_AMP) || match(p, TOK_STAR)) {
         Expr *rhs = parse_unary(p);
         if (!rhs) return NULL;
@@ -466,7 +730,7 @@ static int parse_stmt_list(Parser *p, Stmt ***out_stmts, size_t *out_count);
 
 static int is_lvalue_expr(const Expr *expr) {
     if (!expr) return 0;
-    if (expr->kind == EXPR_IDENT || expr->kind == EXPR_INDEX) return 1;
+    if (expr->kind == EXPR_IDENT || expr->kind == EXPR_INDEX || expr->kind == EXPR_FIELD) return 1;
     if (expr->kind == EXPR_UNARY && expr->as.unary.op == UN_DEREF) return 1;
     return 0;
 }
@@ -521,20 +785,23 @@ static Stmt *parse_stmt(Parser *p) {
         if (!expect(p, TOK_LPAREN, "expected '('") ) return NULL;
         Stmt *init = NULL;
         if (!match(p, TOK_SEMI)) {
-            if (match(p, TOK_INT)) {
-                while (match(p, TOK_STAR)) { }
+            if (peek(p)->kind == TOK_INT || peek(p)->kind == TOK_CHAR || peek(p)->kind == TOK_VOID || peek(p)->kind == TOK_STRUCT || peek(p)->kind == TOK_UNION) {
+                Type *type = parse_type(p);
+                if (!type) return NULL;
+                if (type->kind == TYPE_VOID) { free_type_local(type); if (!p->error) p->error = dup_error_at(peek(p), "void variable not supported"); return NULL; }
                 if (peek(p)->kind != TOK_IDENT) { expect(p, TOK_IDENT, "expected identifier"); return NULL; }
                 char *name = dup_lexeme(peek(p));
-                if (!name) { p->error = dup_error_at(peek(p), "out of memory"); return NULL; }
+                if (!name) { free_type_local(type); p->error = dup_error_at(peek(p), "out of memory"); return NULL; }
                 advance(p);
                 Expr *val = NULL;
                 if (match(p, TOK_ASSIGN)) {
                     val = parse_expr(p);
-                    if (!val) { free(name); return NULL; }
+                    if (!val) { free(name); free_type_local(type); return NULL; }
                 }
                 init = new_stmt(STMT_DECL, name, val);
-                if (!init) { free(name); free_expr_local(val); return NULL; }
-            } else if (peek(p)->kind == TOK_IDENT && (peek_n(p, 1)->kind == TOK_ASSIGN || peek_n(p, 1)->kind == TOK_LBRACKET)) {
+                if (!init) { free(name); free_expr_local(val); free_type_local(type); return NULL; }
+                init->decl_type = type;
+            } else if (peek(p)->kind == TOK_IDENT && (peek_n(p, 1)->kind == TOK_ASSIGN || peek_n(p, 1)->kind == TOK_LBRACKET || peek_n(p, 1)->kind == TOK_DOT || peek_n(p, 1)->kind == TOK_ARROW)) {
                 Expr *lhs = parse_lvalue(p);
                 if (!lhs) return NULL;
                 if (!expect(p, TOK_ASSIGN, "expected '='")) { free_expr_local(lhs); return NULL; }
@@ -561,7 +828,7 @@ static Stmt *parse_stmt(Parser *p) {
 
         Stmt *post = NULL;
         if (!match(p, TOK_RPAREN)) {
-            if (peek(p)->kind == TOK_IDENT && (peek_n(p, 1)->kind == TOK_ASSIGN || peek_n(p, 1)->kind == TOK_LBRACKET)) {
+            if (peek(p)->kind == TOK_IDENT && (peek_n(p, 1)->kind == TOK_ASSIGN || peek_n(p, 1)->kind == TOK_LBRACKET || peek_n(p, 1)->kind == TOK_DOT || peek_n(p, 1)->kind == TOK_ARROW)) {
                 Expr *lhs = parse_lvalue(p);
                 if (!lhs) { free_stmt_local(init); free_expr_local(cond); return NULL; }
                 if (!expect(p, TOK_ASSIGN, "expected '='")) { free_stmt_local(init); free_expr_local(cond); free_expr_local(lhs); return NULL; }
@@ -670,13 +937,18 @@ switch_fail:
         return new_stmt(STMT_CONTINUE, NULL, NULL);
     }
     if (match(p, TOK_RETURN)) {
-        Expr *expr = parse_expr(p);
-        if (!expr) return NULL;
-        if (!expect(p, TOK_SEMI, "expected ';' after return")) { free_expr_local(expr); return NULL; }
+        Expr *expr = NULL;
+        if (!match(p, TOK_SEMI)) {
+            expr = parse_expr(p);
+            if (!expr) return NULL;
+            if (!expect(p, TOK_SEMI, "expected ';' after return")) { free_expr_local(expr); return NULL; }
+        }
         return new_stmt(STMT_RETURN, NULL, expr);
     }
-    if (match(p, TOK_INT)) {
-        while (match(p, TOK_STAR)) { }
+    if (peek(p)->kind == TOK_INT || peek(p)->kind == TOK_CHAR || peek(p)->kind == TOK_VOID || peek(p)->kind == TOK_STRUCT || peek(p)->kind == TOK_UNION) {
+        Type *type = parse_type(p);
+        if (!type) return NULL;
+        if (type->kind == TYPE_VOID) { free_type_local(type); if (!p->error) p->error = dup_error_at(peek(p), "void variable not supported"); return NULL; }
         if (peek(p)->kind != TOK_IDENT) {
             expect(p, TOK_IDENT, "expected identifier");
             return NULL;
@@ -684,16 +956,39 @@ switch_fail:
         char *name = dup_lexeme(peek(p));
         if (!name) { p->error = dup_error_at(peek(p), "out of memory"); return NULL; }
         advance(p);
+        if (match(p, TOK_LBRACKET)) {
+            if (peek(p)->kind != TOK_NUMBER) { expect(p, TOK_NUMBER, "expected array size"); free(name); free_type_local(type); return NULL; }
+            long count = peek(p)->value;
+            advance(p);
+            if (!expect(p, TOK_RBRACKET, "expected ']'")) { free(name); free_type_local(type); return NULL; }
+            Type *arr = new_type(TYPE_ARRAY, type);
+            if (!arr) { free(name); free_type_local(type); return NULL; }
+            arr->array_len = (size_t)count;
+            if (match(p, TOK_ASSIGN)) {
+                if (!p->error) p->error = dup_error_at(peek(p), "array initializer not supported for locals");
+                free(name);
+                free_type_local(arr);
+                return NULL;
+            }
+            if (!expect(p, TOK_SEMI, "expected ';' after declaration")) { free(name); free_type_local(arr); return NULL; }
+            Stmt *stmt = new_stmt(STMT_DECL, name, NULL);
+            if (!stmt) { free(name); free_type_local(arr); return NULL; }
+            stmt->decl_type = arr;
+            return stmt;
+        }
         Expr *init = NULL;
         if (match(p, TOK_ASSIGN)) {
             init = parse_expr(p);
             if (!init) { free(name); return NULL; }
         }
         if (!expect(p, TOK_SEMI, "expected ';' after declaration")) { free(name); free_expr_local(init); return NULL; }
-        return new_stmt(STMT_DECL, name, init);
+        Stmt *stmt = new_stmt(STMT_DECL, name, init);
+        if (!stmt) { free(name); free_expr_local(init); free_type_local(type); return NULL; }
+        stmt->decl_type = type;
+        return stmt;
     }
     if (peek(p)->kind == TOK_IDENT) {
-        if (peek_n(p, 1)->kind == TOK_ASSIGN || peek_n(p, 1)->kind == TOK_LBRACKET) {
+        if (peek_n(p, 1)->kind == TOK_ASSIGN || peek_n(p, 1)->kind == TOK_LBRACKET || peek_n(p, 1)->kind == TOK_DOT || peek_n(p, 1)->kind == TOK_ARROW) {
             Expr *lhs = parse_lvalue(p);
             if (!lhs) return NULL;
             if (!expect(p, TOK_ASSIGN, "expected '='")) { free_expr_local(lhs); return NULL; }
@@ -755,18 +1050,21 @@ static int parse_stmt_list(Parser *p, Stmt ***out_stmts, size_t *out_count) {
     return 1;
 }
 
-static int parse_params(Parser *p, char ***out_params, size_t *out_count) {
+static int parse_params(Parser *p, char ***out_params, Type ***out_types, size_t *out_count) {
     char **params = NULL;
+    Type **types = NULL;
     size_t count = 0;
     size_t cap = 0;
     if (peek(p)->kind == TOK_RPAREN) {
         *out_params = NULL;
+        *out_types = NULL;
         *out_count = 0;
         return 1;
     }
     while (1) {
-        if (!expect(p, TOK_INT, "expected 'int' in parameter")) goto fail;
-        while (match(p, TOK_STAR)) { }
+        Type *type = parse_type(p);
+        if (!type) { expect(p, TOK_INT, "expected type in parameter"); goto fail; }
+        if (type->kind == TYPE_VOID) { free_type_local(type); if (!p->error) p->error = dup_error_at(peek(p), "void parameter not supported"); goto fail; }
         if (peek(p)->kind != TOK_IDENT) { expect(p, TOK_IDENT, "expected parameter name"); goto fail; }
         char *name = dup_lexeme(peek(p));
         if (!name) { p->error = dup_error_at(peek(p), "out of memory"); goto fail; }
@@ -774,25 +1072,34 @@ static int parse_params(Parser *p, char ***out_params, size_t *out_count) {
         if (count + 1 > cap) {
             size_t next = (cap == 0) ? 4 : cap * 2;
             char **mem = (char **)realloc(params, next * sizeof(char *));
-            if (!mem) { free(name); p->error = dup_error_at(peek(p), "out of memory"); goto fail; }
+            if (!mem) { free(name); free_type_local(type); p->error = dup_error_at(peek(p), "out of memory"); goto fail; }
             params = mem;
+            Type **tmem = (Type **)realloc(types, next * sizeof(Type *));
+            if (!tmem) { free(name); free_type_local(type); p->error = dup_error_at(peek(p), "out of memory"); goto fail; }
+            types = tmem;
             cap = next;
         }
         params[count++] = name;
+        types[count - 1] = type;
         if (match(p, TOK_COMMA)) continue;
         break;
     }
     *out_params = params;
+    *out_types = types;
     *out_count = count;
     return 1;
 
 fail:
     for (size_t i = 0; i < count; i++) free(params[i]);
     free(params);
+    if (types) {
+        for (size_t i = 0; i < count; i++) free_type_local(types[i]);
+    }
+    free(types);
     return 0;
 }
 
-static Global *new_global(GlobalKind kind, char *name, long value, char *data, size_t len) {
+static Global *new_global(GlobalKind kind, char *name, long value, char *data, size_t len, Type *type) {
     Global *g = (Global *)calloc(1, sizeof(Global));
     if (!g) return NULL;
     g->kind = kind;
@@ -800,6 +1107,7 @@ static Global *new_global(GlobalKind kind, char *name, long value, char *data, s
     g->value = value;
     g->data = data;
     g->len = len;
+    g->type = type;
     return g;
 }
 
@@ -821,102 +1129,131 @@ Program *parse_program(const Token *tokens, size_t count, char **out_error) {
     p.count = count;
     p.pos = 0;
     p.error = NULL;
+    p.structs = NULL;
+    p.struct_count = 0;
+    p.struct_cap = 0;
     Program *program = (Program *)calloc(1, sizeof(Program));
     if (!program) { if (out_error) *out_error = dup_error_at(peek(&p), "out of memory"); return NULL; }
 
     while (peek(&p)->kind != TOK_EOF) {
-        if (match(&p, TOK_INT)) {
-            while (match(&p, TOK_STAR)) { }
-            if (peek(&p)->kind != TOK_IDENT) { expect(&p, TOK_IDENT, "expected name"); goto done; }
-            char *name = dup_lexeme(peek(&p));
-            if (!name) { p.error = dup_error_at(peek(&p), "out of memory"); goto done; }
+        Type *type = parse_type(&p);
+        if (!type) { p.error = dup_error_at(peek(&p), "expected type"); goto done; }
+        if ((type->kind == TYPE_STRUCT || type->kind == TYPE_UNION) && match(&p, TOK_SEMI)) {
+            free_type_local(type);
+            continue;
+        }
+        if (peek(&p)->kind != TOK_IDENT) { expect(&p, TOK_IDENT, "expected name"); free_type_local(type); goto done; }
+        char *name = dup_lexeme(peek(&p));
+        if (!name) { free_type_local(type); p.error = dup_error_at(peek(&p), "out of memory"); goto done; }
+        advance(&p);
+
+        if (match(&p, TOK_LBRACKET)) {
+            if (type->kind != TYPE_INT) { free_type_local(type); free(name); p.error = dup_error_at(peek(&p), "only int arrays supported"); goto done; }
+            if (peek(&p)->kind != TOK_NUMBER) { expect(&p, TOK_NUMBER, "expected array size"); free_type_local(type); free(name); goto done; }
+            long count = peek(&p)->value;
             advance(&p);
-            if (match(&p, TOK_LBRACKET)) {
-                if (peek(&p)->kind != TOK_NUMBER) { expect(&p, TOK_NUMBER, "expected array size"); free(name); goto done; }
-                long count = peek(&p)->value;
-                advance(&p);
-                if (!expect(&p, TOK_RBRACKET, "expected ']'")) { free(name); goto done; }
-                long *vals = NULL;
-                size_t vcount = 0;
-                if (match(&p, TOK_ASSIGN)) {
-                    if (!expect(&p, TOK_LBRACE, "expected '{'")) { free(name); goto done; }
-                    while (peek(&p)->kind != TOK_RBRACE && peek(&p)->kind != TOK_EOF) {
-                        if (peek(&p)->kind != TOK_NUMBER) { expect(&p, TOK_NUMBER, "expected array element"); free(vals); free(name); goto done; }
-                        long v = peek(&p)->value;
-                        advance(&p);
-                        long *mem = (long *)realloc(vals, (vcount + 1) * sizeof(long));
-                        if (!mem) { p.error = dup_error_at(peek(&p), "out of memory"); free(vals); free(name); goto done; }
-                        vals = mem;
-                        vals[vcount++] = v;
-                        if (match(&p, TOK_COMMA)) continue;
-                        break;
-                    }
-                    if (!expect(&p, TOK_RBRACE, "expected '}'")) { free(vals); free(name); goto done; }
-                }
-                if (!expect(&p, TOK_SEMI, "expected ';'")) { free(vals); free(name); goto done; }
-                Global *g = new_global(GLOB_INT_ARR, name, count, (char *)vals, vcount);
-                if (!g) { p.error = dup_error_at(peek(&p), "out of memory"); free(vals); free(name); goto done; }
-                if (!program_add_global(program, g, &p)) { free(g->name); free(g->data); free(g); goto done; }
-            } else if (match(&p, TOK_LPAREN)) {
-                char **params = NULL;
-                size_t param_count = 0;
-                if (!parse_params(&p, &params, &param_count)) { free(name); goto done; }
-                if (!expect(&p, TOK_RPAREN, "expected ')'") ) { free(name); goto done; }
-                if (!expect(&p, TOK_LBRACE, "expected '{'") ) { free(name); goto done; }
-                Stmt **stmts = NULL;
-                size_t stmt_count = 0;
-                if (!parse_stmt_list(&p, &stmts, &stmt_count)) { free(name); goto done; }
-                if (!expect(&p, TOK_RBRACE, "expected '}'")) { free(name); goto done; }
-
-                Function *func = new_function(name);
-                if (!func) { p.error = dup_error_at(peek(&p), "out of memory"); goto done; }
-                func->params = params;
-                func->param_count = param_count;
-                func->stmts = stmts;
-                func->stmt_count = stmt_count;
-
-                size_t next = program->func_count + 1;
-                Function **mem = (Function **)realloc(program->funcs, next * sizeof(Function *));
-                if (!mem) { p.error = dup_error_at(peek(&p), "out of memory"); free_function_local(func); goto done; }
-                program->funcs = mem;
-                program->funcs[program->func_count++] = func;
-            } else {
-                long value = 0;
-                if (match(&p, TOK_ASSIGN)) {
-                    if (peek(&p)->kind != TOK_NUMBER) { expect(&p, TOK_NUMBER, "expected integer literal"); free(name); goto done; }
-                    value = peek(&p)->value;
+            if (!expect(&p, TOK_RBRACKET, "expected ']'")) { free_type_local(type); free(name); goto done; }
+            long *vals = NULL;
+            size_t vcount = 0;
+            if (match(&p, TOK_ASSIGN)) {
+                if (!expect(&p, TOK_LBRACE, "expected '{'")) { free_type_local(type); free(name); goto done; }
+                while (peek(&p)->kind != TOK_RBRACE && peek(&p)->kind != TOK_EOF) {
+                    if (peek(&p)->kind != TOK_NUMBER) { expect(&p, TOK_NUMBER, "expected array element"); free(vals); free_type_local(type); free(name); goto done; }
+                    long v = peek(&p)->value;
                     advance(&p);
+                    long *mem = (long *)realloc(vals, (vcount + 1) * sizeof(long));
+                    if (!mem) { p.error = dup_error_at(peek(&p), "out of memory"); free(vals); free_type_local(type); free(name); goto done; }
+                    vals = mem;
+                    vals[vcount++] = v;
+                    if (match(&p, TOK_COMMA)) continue;
+                    break;
                 }
-                if (!expect(&p, TOK_SEMI, "expected ';'")) { free(name); goto done; }
-                Global *g = new_global(GLOB_INT, name, value, NULL, 0);
-                if (!g) { p.error = dup_error_at(peek(&p), "out of memory"); free(name); goto done; }
-                if (!program_add_global(program, g, &p)) { free(g->name); free(g); goto done; }
+                if (!expect(&p, TOK_RBRACE, "expected '}'")) { free(vals); free_type_local(type); free(name); goto done; }
             }
+            if (!expect(&p, TOK_SEMI, "expected ';'")) { free(vals); free_type_local(type); free(name); goto done; }
+            Type *arr_type = new_type(TYPE_PTR, type);
+            if (!arr_type) { free(vals); free_type_local(type); free(name); p.error = dup_error_at(peek(&p), "out of memory"); goto done; }
+            Global *g = new_global(GLOB_INT_ARR, name, count, (char *)vals, vcount, arr_type);
+            if (!g) { p.error = dup_error_at(peek(&p), "out of memory"); free(vals); free_type_local(arr_type); free(name); goto done; }
+            if (!program_add_global(program, g, &p)) { free(g->name); free(g->data); free(g->type); free(g); goto done; }
             continue;
         }
-        if (match(&p, TOK_CHAR)) {
-            if (!expect(&p, TOK_STAR, "expected '*'") ) goto done;
-            if (peek(&p)->kind != TOK_IDENT) { expect(&p, TOK_IDENT, "expected name"); goto done; }
-            char *name = dup_lexeme(peek(&p));
-            if (!name) { p.error = dup_error_at(peek(&p), "out of memory"); goto done; }
-            advance(&p);
-            if (!expect(&p, TOK_ASSIGN, "expected '='")) { free(name); goto done; }
-            if (peek(&p)->kind != TOK_STRING) { expect(&p, TOK_STRING, "expected string literal"); free(name); goto done; }
-            char *data = NULL;
-            size_t len = 0;
-            if (!decode_string(peek(&p), &data, &len, &p.error)) { free(name); goto done; }
-            advance(&p);
-            if (!expect(&p, TOK_SEMI, "expected ';'")) { free(name); free(data); goto done; }
-            Global *g = new_global(GLOB_STR, name, 0, data, len);
-            if (!g) { p.error = dup_error_at(peek(&p), "out of memory"); free(name); free(data); goto done; }
-            if (!program_add_global(program, g, &p)) { free(g->name); free(g->data); free(g); goto done; }
+
+        if (match(&p, TOK_LPAREN)) {
+            char **params = NULL;
+            Type **param_types = NULL;
+            size_t param_count = 0;
+            if (!parse_params(&p, &params, &param_types, &param_count)) { free(name); free_type_local(type); goto done; }
+            if (!expect(&p, TOK_RPAREN, "expected ')'") ) { free(name); free_type_local(type); goto done; }
+            if (!expect(&p, TOK_LBRACE, "expected '{'") ) { free(name); free_type_local(type); goto done; }
+            Stmt **stmts = NULL;
+            size_t stmt_count = 0;
+            if (!parse_stmt_list(&p, &stmts, &stmt_count)) { free(name); free_type_local(type); goto done; }
+            if (!expect(&p, TOK_RBRACE, "expected '}'")) { free(name); free_type_local(type); goto done; }
+
+            Function *func = new_function(name);
+            if (!func) { p.error = dup_error_at(peek(&p), "out of memory"); goto done; }
+            func->params = params;
+            func->param_types = param_types;
+            func->param_count = param_count;
+            func->stmts = stmts;
+            func->stmt_count = stmt_count;
+            func->ret_type = type;
+
+            size_t next = program->func_count + 1;
+            Function **mem = (Function **)realloc(program->funcs, next * sizeof(Function *));
+            if (!mem) { p.error = dup_error_at(peek(&p), "out of memory"); free_function_local(func); goto done; }
+            program->funcs = mem;
+            program->funcs[program->func_count++] = func;
             continue;
         }
-        p.error = dup_error_at(peek(&p), "expected top-level declaration");
-        goto done;
+
+        if (type->kind == TYPE_VOID) { free_type_local(type); free(name); p.error = dup_error_at(peek(&p), "void variable not supported"); goto done; }
+        if (type->kind == TYPE_STRUCT || type->kind == TYPE_UNION) {
+            free_type_local(type);
+            free(name);
+            p.error = dup_error_at(peek(&p), "struct/union globals not supported");
+            goto done;
+        }
+
+        long value = 0;
+        char *data = NULL;
+        size_t len = 0;
+        GlobalKind kind = GLOB_INT;
+        if (match(&p, TOK_ASSIGN)) {
+            if (peek(&p)->kind == TOK_STRING) {
+                if (!(type->kind == TYPE_PTR && type->base && type->base->kind == TYPE_CHAR)) {
+                    free_type_local(type);
+                    free(name);
+                    p.error = dup_error_at(peek(&p), "string literal requires char*");
+                    goto done;
+                }
+                if (!decode_string(peek(&p), &data, &len, &p.error)) { free_type_local(type); free(name); goto done; }
+                advance(&p);
+                kind = GLOB_STR;
+            } else if (peek(&p)->kind == TOK_NUMBER) {
+                value = peek(&p)->value;
+                advance(&p);
+                kind = (type->kind == TYPE_CHAR) ? GLOB_CHAR : GLOB_INT;
+            } else {
+                expect(&p, TOK_NUMBER, "expected initializer");
+                free_type_local(type);
+                free(name);
+                goto done;
+            }
+        } else {
+            kind = (type->kind == TYPE_CHAR) ? GLOB_CHAR : GLOB_INT;
+        }
+        if (!expect(&p, TOK_SEMI, "expected ';'")) { free_type_local(type); free(name); free(data); goto done; }
+        Global *g = new_global(kind, name, value, data, len, type);
+        if (!g) { p.error = dup_error_at(peek(&p), "out of memory"); free_type_local(type); free(name); free(data); goto done; }
+        if (!program_add_global(program, g, &p)) { free(g->name); free(g->data); free(g->type); free(g); goto done; }
+        continue;
     }
 
 done:
+    program->structs = p.structs;
+    program->struct_count = p.struct_count;
     if (p.error) {
         free_program(program);
     }

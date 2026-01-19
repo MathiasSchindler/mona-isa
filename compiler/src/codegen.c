@@ -18,10 +18,17 @@ typedef struct {
     const char *name;
     int needs_ra_save;
     int max_temp;
-    const char **locals;
+    struct LocalInfo *locals;
     size_t local_count;
     size_t local_cap;
+    size_t local_bytes;
 } FuncInfo;
+
+typedef struct LocalInfo {
+    const char *name;
+    size_t size;
+    int offset;
+} LocalInfo;
 
 static FuncInfo *find_func(FuncInfo *funcs, size_t count, const char *name) {
     for (size_t i = 0; i < count; i++) {
@@ -39,18 +46,45 @@ static int find_name(const char **names, size_t count, const char *name) {
     return -1;
 }
 
-static int add_local(FuncInfo *info, const char *name) {
+static int find_local(const LocalInfo *locals, size_t count, const char *name) {
+    for (size_t i = 0; i < count; i++) {
+        if (locals[i].name == name) return (int)i;
+        if (locals[i].name && name && strcmp(locals[i].name, name) == 0) return (int)i;
+    }
+    return -1;
+}
+
+static int add_local(FuncInfo *info, const char *name, size_t size) {
     if (!info || !name) return 0;
-    if (find_name(info->locals, info->local_count, name) >= 0) return 1;
+    int idx = find_local(info->locals, info->local_count, name);
+    if (idx >= 0) {
+        size_t aligned = (size + 7) & ~((size_t)7);
+        if (aligned > info->locals[idx].size) info->locals[idx].size = aligned;
+        return 1;
+    }
     if (info->local_count + 1 > info->local_cap) {
         size_t next = (info->local_cap == 0) ? 8 : info->local_cap * 2;
-        const char **mem = (const char **)realloc(info->locals, next * sizeof(char *));
+        LocalInfo *mem = (LocalInfo *)realloc(info->locals, next * sizeof(LocalInfo));
         if (!mem) return 0;
         info->locals = mem;
         info->local_cap = next;
     }
-    info->locals[info->local_count++] = name;
+    size_t aligned = (size + 7) & ~((size_t)7);
+    info->locals[info->local_count].name = name;
+    info->locals[info->local_count].size = aligned;
+    info->locals[info->local_count].offset = 0;
+    info->local_count++;
     return 1;
+}
+
+static void finalize_locals(FuncInfo *info) {
+    if (!info) return;
+    size_t offset = 0;
+    for (size_t i = 0; i < info->local_count; i++) {
+        info->locals[i].offset = (int)offset;
+        offset += info->locals[i].size;
+    }
+    info->local_bytes = offset;
 }
 
 static void update_max_temp(FuncInfo *info, int temp) {
@@ -64,9 +98,9 @@ static int temp_reg_count(void) {
 
 static int local_offset(const FuncInfo *info, int ra_size, int spill_count, const char *name) {
     if (!info || !name) return -1;
-    int idx = find_name(info->locals, info->local_count, name);
+    int idx = find_local(info->locals, info->local_count, name);
     if (idx < 0) return -1;
-    return ra_size + spill_count * 8 + idx * 8;
+    return ra_size + spill_count * 8 + info->locals[idx].offset;
 }
 
 static int spill_offset(int temp, int ra_size, int reg_count) {
@@ -116,7 +150,7 @@ int codegen_emit_asm(const IRProgram *ir, FILE *out, char **out_error) {
     size_t global_cap = 0;
     for (size_t i = 0; i < ir->count; i++) {
         const IRInst *inst = &ir->insts[i];
-        if (inst->op == IR_GLOBAL_INT || inst->op == IR_GLOBAL_STR || inst->op == IR_GLOBAL_INT_ARR) {
+        if (inst->op == IR_GLOBAL_INT || inst->op == IR_GLOBAL_CHAR || inst->op == IR_GLOBAL_STR || inst->op == IR_GLOBAL_INT_ARR) {
             if (find_name(globals, global_count, inst->name) < 0) {
                 if (global_count + 1 > global_cap) {
                     size_t next = (global_cap == 0) ? 8 : global_cap * 2;
@@ -147,14 +181,18 @@ int codegen_emit_asm(const IRProgram *ir, FILE *out, char **out_error) {
                 funcs[func_count].locals = NULL;
                 funcs[func_count].local_count = 0;
                 funcs[func_count].local_cap = 0;
+                funcs[func_count].local_bytes = 0;
                 current_info = &funcs[func_count++];
             }
             continue;
         }
         if (!current_info) continue;
         if (inst->op == IR_CALL) current_info->needs_ra_save = 1;
+        if (inst->op == IR_LOCAL_ALLOC && inst->name) {
+            if (!add_local(current_info, inst->name, (size_t)inst->len)) { free(funcs); free(globals); if (out_error) *out_error = dup_error("error: out of memory"); return 0; }
+        }
         if (inst->op == IR_ADDR && inst->name && find_name(globals, global_count, inst->name) < 0) {
-            if (!add_local(current_info, inst->name)) { free(funcs); free(globals); if (out_error) *out_error = dup_error("error: out of memory"); return 0; }
+            if (!add_local(current_info, inst->name, 8)) { free(funcs); free(globals); if (out_error) *out_error = dup_error("error: out of memory"); return 0; }
         }
         update_max_temp(current_info, inst->dst);
         update_max_temp(current_info, inst->lhs);
@@ -164,9 +202,13 @@ int codegen_emit_asm(const IRProgram *ir, FILE *out, char **out_error) {
         }
     }
 
+    for (size_t i = 0; i < func_count; i++) {
+        finalize_locals(&funcs[i]);
+    }
+
     int has_data = 0;
     for (size_t i = 0; i < ir->count; i++) {
-        if (ir->insts[i].op == IR_GLOBAL_INT || ir->insts[i].op == IR_GLOBAL_STR || ir->insts[i].op == IR_GLOBAL_INT_ARR) { has_data = 1; break; }
+        if (ir->insts[i].op == IR_GLOBAL_INT || ir->insts[i].op == IR_GLOBAL_CHAR || ir->insts[i].op == IR_GLOBAL_STR || ir->insts[i].op == IR_GLOBAL_INT_ARR) { has_data = 1; break; }
     }
     if (has_data) {
         fprintf(out, ".data\n");
@@ -175,6 +217,9 @@ int codegen_emit_asm(const IRProgram *ir, FILE *out, char **out_error) {
             if (inst->op == IR_GLOBAL_INT) {
                 fprintf(out, "%s:\n", inst->name ? inst->name : "<anon>");
                 fprintf(out, "  .dword %ld\n", inst->imm);
+            } else if (inst->op == IR_GLOBAL_CHAR) {
+                fprintf(out, "%s:\n", inst->name ? inst->name : "<anon>");
+                fprintf(out, "  .byte %u\n", (unsigned char)inst->imm);
             } else if (inst->op == IR_GLOBAL_INT_ARR) {
                 fprintf(out, "%s:\n", inst->name ? inst->name : "<anon>");
                 size_t count = (size_t)inst->imm;
@@ -207,8 +252,10 @@ int codegen_emit_asm(const IRProgram *ir, FILE *out, char **out_error) {
         const IRInst *inst = &ir->insts[i];
         switch (inst->op) {
             case IR_GLOBAL_INT:
+            case IR_GLOBAL_CHAR:
             case IR_GLOBAL_INT_ARR:
             case IR_GLOBAL_STR:
+            case IR_LOCAL_ALLOC:
                 break;
             case IR_FUNC:
                 current = find_func(funcs, func_count, inst->name);
@@ -217,7 +264,7 @@ int codegen_emit_asm(const IRProgram *ir, FILE *out, char **out_error) {
                     cur_ra_size = current->needs_ra_save ? 8 : 0;
                     int max_temp = current->max_temp;
                     cur_spill_count = (max_temp + 1 > reg_count) ? (max_temp + 1 - reg_count) : 0;
-                    cur_frame_size = cur_ra_size + cur_spill_count * 8 + (int)current->local_count * 8;
+                    cur_frame_size = cur_ra_size + cur_spill_count * 8 + (int)current->local_bytes;
                     if (cur_frame_size > 0) {
                         fprintf(out, "  addi sp, sp, -%d\n", cur_frame_size);
                         if (current->needs_ra_save) {
@@ -293,6 +340,25 @@ int codegen_emit_asm(const IRProgram *ir, FILE *out, char **out_error) {
                 }
                 break;
             }
+            case IR_LOAD8: {
+                const char *addr = NULL;
+                if (inst->lhs >= reg_count) {
+                    int off = spill_offset(inst->lhs, cur_ra_size, reg_count);
+                    addr = scratch_regs[0];
+                    fprintf(out, "  ld %s, %d, sp\n", addr, off);
+                } else {
+                    addr = temp_reg_name(inst->lhs, out_error);
+                    if (!addr) return 0;
+                }
+                const char *rd = (inst->dst >= reg_count) ? scratch_regs[1] : temp_reg_name(inst->dst, out_error);
+                if (!rd) return 0;
+                fprintf(out, "  ldb %s, 0, %s\n", rd, addr);
+                if (inst->dst >= reg_count) {
+                    int off = spill_offset(inst->dst, cur_ra_size, reg_count);
+                    fprintf(out, "  st %s, %d, sp\n", rd, off);
+                }
+                break;
+            }
             case IR_STORE: {
                 const char *addr = NULL;
                 if (inst->lhs >= reg_count) {
@@ -313,6 +379,28 @@ int codegen_emit_asm(const IRProgram *ir, FILE *out, char **out_error) {
                     if (!val) return 0;
                 }
                 fprintf(out, "  st %s, 0, %s\n", val, addr);
+                break;
+            }
+            case IR_STORE8: {
+                const char *addr = NULL;
+                if (inst->lhs >= reg_count) {
+                    int off = spill_offset(inst->lhs, cur_ra_size, reg_count);
+                    addr = scratch_regs[0];
+                    fprintf(out, "  ld %s, %d, sp\n", addr, off);
+                } else {
+                    addr = temp_reg_name(inst->lhs, out_error);
+                    if (!addr) return 0;
+                }
+                const char *val = NULL;
+                if (inst->rhs >= reg_count) {
+                    int off = spill_offset(inst->rhs, cur_ra_size, reg_count);
+                    val = scratch_regs[1];
+                    fprintf(out, "  ld %s, %d, sp\n", val, off);
+                } else {
+                    val = temp_reg_name(inst->rhs, out_error);
+                    if (!val) return 0;
+                }
+                fprintf(out, "  stb %s, 0, %s\n", val, addr);
                 break;
             }
             case IR_BIN: {
@@ -466,6 +554,21 @@ int codegen_emit_asm(const IRProgram *ir, FILE *out, char **out_error) {
                     fprintf(out, "  addi sp, sp, %d\n", cur_frame_size);
                 }
                 fprintf(out, "  ret\n");
+                break;
+            }
+            case IR_EXIT: {
+                const char *rs = NULL;
+                if (inst->lhs >= reg_count) {
+                    int off = spill_offset(inst->lhs, cur_ra_size, reg_count);
+                    rs = scratch_regs[0];
+                    fprintf(out, "  ld %s, %d, sp\n", rs, off);
+                } else {
+                    rs = temp_reg_name(inst->lhs, out_error);
+                    if (!rs) return 0;
+                }
+                fprintf(out, "  mov r10, %s\n", rs);
+                fprintf(out, "  li r17, 3\n");
+                fprintf(out, "  ecall\n");
                 break;
             }
             case IR_LABEL:
