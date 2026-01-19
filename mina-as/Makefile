@@ -42,6 +42,7 @@ $(BIN): $(SRC)
 
 clean:
 	rm -f $(BIN) $(HELLO_BIN) $(TENSOR_BIN) $(BOTTLES_BIN) $(UART_ECHO_BIN) $(CSR_TEST_BIN) $(TRAP_TEST_BIN) $(CAP_TEST_BIN) $(SYSCALL_IO_BIN) $(FACTORIAL_TEST_BIN) $(FIB_TEST_BIN) $(PRIME_TEST_BIN) $(REVERSE_TEST_BIN) $(PALINDROME_TEST_BIN) $(ABI_TEST_BIN)
+	rm -rf tests/bin
 
 examples: $(BIN)
 	./$(BIN) tests/src/hello.s -o $(HELLO_BIN)

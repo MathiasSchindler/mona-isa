@@ -4,9 +4,10 @@ set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 AS="$ROOT/../mina-as/mina-as"
 SIM="$ROOT/mina-sim"
-OUT="$ROOT/tests/out"
+OUT_ELF="$ROOT/../out/elf"
+OUT_TMP="$ROOT/../out/tmp"
 
-mkdir -p "$OUT"
+mkdir -p "$OUT_ELF" "$OUT_TMP"
 
 if [ ! -x "$SIM" ]; then
   make -s -C "$ROOT"
@@ -27,8 +28,8 @@ run_test() {
   for opt in "" "-O"; do
     suffix=""
     if [ -n "$opt" ]; then suffix="-opt"; fi
-    elf="$OUT/${name}${suffix}.elf"
-    out="$OUT/${name}${suffix}.out"
+    elf="$OUT_ELF/${name}${suffix}.elf"
+    out="$OUT_TMP/${name}${suffix}.out"
 
     $AS $opt $extra_args "$src" -o "$elf"
     if [ -n "$input" ]; then

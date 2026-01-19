@@ -10,3 +10,5 @@ mina-as/mina-as
 simulator/mina-sim
 simulator/hello.elf
 simulator/tests/out/
+out/elf/
+out/tmp/

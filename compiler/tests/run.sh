@@ -5,10 +5,12 @@ ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 BIN="$ROOT_DIR/minac"
 AS="$ROOT_DIR/../mina-as/mina-as"
 SIM="$ROOT_DIR/../simulator/mina-sim"
-OUT="$ROOT_DIR/tests/out"
+OUT_ELF="$ROOT_DIR/../out/elf"
+OUT_TMP="$ROOT_DIR/../out/tmp"
+OUT="$OUT_ELF"
 CLIB_SRC="$ROOT_DIR/../clib/src/clib.c"
 
-mkdir -p "$OUT"
+mkdir -p "$OUT_ELF" "$OUT_TMP"
 
 if [ ! -x "$BIN" ]; then
   echo "minac binary not found. Run 'make' in compiler/." >&2
@@ -32,7 +34,6 @@ if "$BIN" >/dev/null 2>&1; then
   echo "FAIL c0_usage" >&2
   exit 1
 fi
-
 echo "PASS c0_usage"
 
 # c1_expr.c: should parse
@@ -65,116 +66,116 @@ fi
 echo "PASS n1_err_recovery"
 
 # n2_const_init.c: constant expressions in initializers
-"$BIN" -o "$OUT/n2_const_init.elf" "$ROOT_DIR/tests/n2_const_init.c"
-OUT_LOG=$("$SIM" "$OUT/n2_const_init.elf" 2>&1 || true)
+"$BIN" -o "$OUT_ELF/n2_const_init.elf" "$ROOT_DIR/tests/n2_const_init.c"
+OUT_LOG=$("$SIM" "$OUT_ELF/n2_const_init.elf" 2>&1 || true)
 echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL n2_const_init_sim" >&2; exit 1; }
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL n2_const_init_sim" >&2; exit 1; }
 echo "PASS n2_const_init_sim"
 
 # n3_enum.c: enum declarations and usage
-"$BIN" -o "$OUT/n3_enum.elf" "$ROOT_DIR/tests/n3_enum.c"
-OUT_LOG=$("$SIM" "$OUT/n3_enum.elf" 2>&1 || true)
+"$BIN" -o "$OUT_ELF/n3_enum.elf" "$ROOT_DIR/tests/n3_enum.c"
+OUT_LOG=$("$SIM" "$OUT_ELF/n3_enum.elf" 2>&1 || true)
 echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL n3_enum_sim" >&2; exit 1; }
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL n3_enum_sim" >&2; exit 1; }
 echo "PASS n3_enum_sim"
 
 # n4_init_struct.c: aggregate initializers
-"$BIN" -o "$OUT/n4_init_struct.elf" "$ROOT_DIR/tests/n4_init_struct.c"
-OUT_LOG=$("$SIM" "$OUT/n4_init_struct.elf" 2>&1 || true)
+"$BIN" -o "$OUT_ELF/n4_init_struct.elf" "$ROOT_DIR/tests/n4_init_struct.c"
+OUT_LOG=$("$SIM" "$OUT_ELF/n4_init_struct.elf" 2>&1 || true)
 echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL n4_init_struct_sim" >&2; exit 1; }
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL n4_init_struct_sim" >&2; exit 1; }
 echo "PASS n4_init_struct_sim"
 
 # l0_putchar.c: builtin putchar
-"$BIN" -o "$OUT/l0_putchar.elf" "$ROOT_DIR/tests/l0_putchar.c"
-OUT_LOG=$("$SIM" "$OUT/l0_putchar.elf" 2>&1 || true)
+"$BIN" -o "$OUT_ELF/l0_putchar.elf" "$ROOT_DIR/tests/l0_putchar.c"
+OUT_LOG=$("$SIM" "$OUT_ELF/l0_putchar.elf" 2>&1 || true)
 echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL l0_putchar_sim" >&2; exit 1; }
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l0_putchar_sim" >&2; exit 1; }
 echo "PASS l0_putchar_sim"
 
 # l0_puts.c: builtin puts
-"$BIN" -o "$OUT/l0_puts.elf" "$ROOT_DIR/tests/l0_puts.c"
-OUT_LOG=$("$SIM" "$OUT/l0_puts.elf" 2>&1 || true)
+"$BIN" -o "$OUT_ELF/l0_puts.elf" "$ROOT_DIR/tests/l0_puts.c"
+OUT_LOG=$("$SIM" "$OUT_ELF/l0_puts.elf" 2>&1 || true)
 echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL l0_puts_sim" >&2; exit 1; }
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l0_puts_sim" >&2; exit 1; }
 echo "PASS l0_puts_sim"
 
 # l0_exit.c: builtin exit
-"$BIN" -o "$OUT/l0_exit.elf" "$ROOT_DIR/tests/l0_exit.c"
-OUT_LOG=$("$SIM" "$OUT/l0_exit.elf" 2>&1 || true)
+"$BIN" -o "$OUT_ELF/l0_exit.elf" "$ROOT_DIR/tests/l0_exit.c"
+OUT_LOG=$("$SIM" "$OUT_ELF/l0_exit.elf" 2>&1 || true)
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l0_exit_sim" >&2; exit 1; }
 echo "PASS l0_exit_sim"
 
 # l1_header.c: clib.h include
-"$BIN" -o "$OUT/l1_header.elf" "$ROOT_DIR/tests/l1_header.c"
-OUT_LOG=$("$SIM" "$OUT/l1_header.elf" 2>&1 || true)
+"$BIN" -o "$OUT_ELF/l1_header.elf" "$ROOT_DIR/tests/l1_header.c"
+OUT_LOG=$("$SIM" "$OUT_ELF/l1_header.elf" 2>&1 || true)
 echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL l1_header_sim" >&2; exit 1; }
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l1_header_sim" >&2; exit 1; }
 echo "PASS l1_header_sim"
 
 # build clib asm (no start) for L2
-"$BIN" --emit-asm --no-start "$CLIB_SRC" > "$OUT/clib.s"
-sed 's/\.L/\.Lclib/g' "$OUT/clib.s" > "$OUT/clib.lib.s"
+"$BIN" --emit-asm --no-start "$CLIB_SRC" > "$OUT_TMP/clib.s"
+sed 's/\.L/\.Lclib/g' "$OUT_TMP/clib.s" > "$OUT_TMP/clib.lib.s"
 
 # l2_strlen.c: clib strlen
-"$BIN" --emit-asm "$ROOT_DIR/tests/l2_strlen.c" > "$OUT/l2_strlen.s"
-cat "$OUT/l2_strlen.s" "$OUT/clib.lib.s" > "$OUT/l2_strlen_full.s"
-"$AS" --data-base 0x4000 "$OUT/l2_strlen_full.s" -o "$OUT/l2_strlen.elf"
-OUT_LOG=$("$SIM" "$OUT/l2_strlen.elf" 2>&1 || true)
+"$BIN" --emit-asm "$ROOT_DIR/tests/l2_strlen.c" > "$OUT_TMP/l2_strlen.s"
+cat "$OUT_TMP/l2_strlen.s" "$OUT_TMP/clib.lib.s" > "$OUT_TMP/l2_strlen_full.s"
+"$AS" --data-base 0x4000 "$OUT_TMP/l2_strlen_full.s" -o "$OUT_ELF/l2_strlen.elf"
+OUT_LOG=$("$SIM" "$OUT_ELF/l2_strlen.elf" 2>&1 || true)
 echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL l2_strlen_sim" >&2; exit 1; }
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l2_strlen_sim" >&2; exit 1; }
 echo "PASS l2_strlen_sim"
 
 # l2_memcpy.c: clib memcpy
-"$BIN" --emit-asm "$ROOT_DIR/tests/l2_memcpy.c" > "$OUT/l2_memcpy.s"
-cat "$OUT/l2_memcpy.s" "$OUT/clib.lib.s" > "$OUT/l2_memcpy_full.s"
-"$AS" --data-base 0x4000 "$OUT/l2_memcpy_full.s" -o "$OUT/l2_memcpy.elf"
-OUT_LOG=$("$SIM" "$OUT/l2_memcpy.elf" 2>&1 || true)
+"$BIN" --emit-asm "$ROOT_DIR/tests/l2_memcpy.c" > "$OUT_TMP/l2_memcpy.s"
+cat "$OUT_TMP/l2_memcpy.s" "$OUT_TMP/clib.lib.s" > "$OUT_TMP/l2_memcpy_full.s"
+"$AS" --data-base 0x4000 "$OUT_TMP/l2_memcpy_full.s" -o "$OUT_ELF/l2_memcpy.elf"
+OUT_LOG=$("$SIM" "$OUT_ELF/l2_memcpy.elf" 2>&1 || true)
 echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL l2_memcpy_sim" >&2; exit 1; }
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l2_memcpy_sim" >&2; exit 1; }
 echo "PASS l2_memcpy_sim"
 
 # l2_memset.c: clib memset
-"$BIN" --emit-asm "$ROOT_DIR/tests/l2_memset.c" > "$OUT/l2_memset.s"
-cat "$OUT/l2_memset.s" "$OUT/clib.lib.s" > "$OUT/l2_memset_full.s"
-"$AS" --data-base 0x4000 "$OUT/l2_memset_full.s" -o "$OUT/l2_memset.elf"
-OUT_LOG=$("$SIM" "$OUT/l2_memset.elf" 2>&1 || true)
+"$BIN" --emit-asm "$ROOT_DIR/tests/l2_memset.c" > "$OUT_TMP/l2_memset.s"
+cat "$OUT_TMP/l2_memset.s" "$OUT_TMP/clib.lib.s" > "$OUT_TMP/l2_memset_full.s"
+"$AS" --data-base 0x4000 "$OUT_TMP/l2_memset_full.s" -o "$OUT_ELF/l2_memset.elf"
+OUT_LOG=$("$SIM" "$OUT_ELF/l2_memset.elf" 2>&1 || true)
 echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL l2_memset_sim" >&2; exit 1; }
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l2_memset_sim" >&2; exit 1; }
 echo "PASS l2_memset_sim"
 
 # l3_printf.c: clib printf (%s/%c/%d)
-"$BIN" --emit-asm "$ROOT_DIR/tests/l3_printf.c" > "$OUT/l3_printf.s"
-cat "$OUT/l3_printf.s" "$OUT/clib.lib.s" > "$OUT/l3_printf_full.s"
-"$AS" --data-base 0x4000 "$OUT/l3_printf_full.s" -o "$OUT/l3_printf.elf"
-OUT_LOG=$("$SIM" "$OUT/l3_printf.elf" 2>&1 || true)
+"$BIN" --emit-asm "$ROOT_DIR/tests/l3_printf.c" > "$OUT_TMP/l3_printf.s"
+cat "$OUT_TMP/l3_printf.s" "$OUT_TMP/clib.lib.s" > "$OUT_TMP/l3_printf_full.s"
+"$AS" --data-base 0x4000 "$OUT_TMP/l3_printf_full.s" -o "$OUT_ELF/l3_printf.elf"
+OUT_LOG=$("$SIM" "$OUT_ELF/l3_printf.elf" 2>&1 || true)
 echo "$OUT_LOG" | grep -q "S=OK C=O D=123" || { echo "FAIL l3_printf_sim" >&2; exit 1; }
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l3_printf_sim" >&2; exit 1; }
 echo "PASS l3_printf_sim"
 
 # l4_ctype.c: clib isdigit/isalpha/isspace
-"$BIN" --emit-asm "$ROOT_DIR/tests/l4_ctype.c" > "$OUT/l4_ctype.s"
-cat "$OUT/l4_ctype.s" "$OUT/clib.lib.s" > "$OUT/l4_ctype_full.s"
-"$AS" --data-base 0x4000 "$OUT/l4_ctype_full.s" -o "$OUT/l4_ctype.elf"
-OUT_LOG=$("$SIM" "$OUT/l4_ctype.elf" 2>&1 || true)
+"$BIN" --emit-asm "$ROOT_DIR/tests/l4_ctype.c" > "$OUT_TMP/l4_ctype.s"
+cat "$OUT_TMP/l4_ctype.s" "$OUT_TMP/clib.lib.s" > "$OUT_TMP/l4_ctype_full.s"
+"$AS" --data-base 0x4000 "$OUT_TMP/l4_ctype_full.s" -o "$OUT_ELF/l4_ctype.elf"
+OUT_LOG=$("$SIM" "$OUT_ELF/l4_ctype.elf" 2>&1 || true)
 echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL l4_ctype_sim" >&2; exit 1; }
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l4_ctype_sim" >&2; exit 1; }
 echo "PASS l4_ctype_sim"
 
 # l5_atoi.c: clib atoi
-"$BIN" --emit-asm "$ROOT_DIR/tests/l5_atoi.c" > "$OUT/l5_atoi.s"
-cat "$OUT/l5_atoi.s" "$OUT/clib.lib.s" > "$OUT/l5_atoi_full.s"
-"$AS" --data-base 0x4000 "$OUT/l5_atoi_full.s" -o "$OUT/l5_atoi.elf"
-OUT_LOG=$("$SIM" "$OUT/l5_atoi.elf" 2>&1 || true)
+"$BIN" --emit-asm "$ROOT_DIR/tests/l5_atoi.c" > "$OUT_TMP/l5_atoi.s"
+cat "$OUT_TMP/l5_atoi.s" "$OUT_TMP/clib.lib.s" > "$OUT_TMP/l5_atoi_full.s"
+"$AS" --data-base 0x4000 "$OUT_TMP/l5_atoi_full.s" -o "$OUT_ELF/l5_atoi.elf"
+OUT_LOG=$("$SIM" "$OUT_ELF/l5_atoi.elf" 2>&1 || true)
 echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL l5_atoi_sim" >&2; exit 1; }
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l5_atoi_sim" >&2; exit 1; }
 echo "PASS l5_atoi_sim"
 
 # l5_strtol.c: clib strtol (base 10)
-"$BIN" --emit-asm "$ROOT_DIR/tests/l5_strtol.c" > "$OUT/l5_strtol.s"
-cat "$OUT/l5_strtol.s" "$OUT/clib.lib.s" > "$OUT/l5_strtol_full.s"
-"$AS" --data-base 0x4000 "$OUT/l5_strtol_full.s" -o "$OUT/l5_strtol.elf"
-OUT_LOG=$("$SIM" "$OUT/l5_strtol.elf" 2>&1 || true)
+"$BIN" --emit-asm "$ROOT_DIR/tests/l5_strtol.c" > "$OUT_TMP/l5_strtol.s"
+cat "$OUT_TMP/l5_strtol.s" "$OUT_TMP/clib.lib.s" > "$OUT_TMP/l5_strtol_full.s"
+"$AS" --data-base 0x4000 "$OUT_TMP/l5_strtol_full.s" -o "$OUT_ELF/l5_strtol.elf"
+OUT_LOG=$("$SIM" "$OUT_ELF/l5_strtol.elf" 2>&1 || true)
 echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL l5_strtol_sim" >&2; exit 1; }
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l5_strtol_sim" >&2; exit 1; }
 echo "PASS l5_strtol_sim"
@@ -196,113 +197,113 @@ fi
 echo "PASS c2_ir_err"
 
 # c3 asm output checks
-"$BIN" --emit-asm "$ROOT_DIR/tests/c3_return.c" > "$OUT/c3_return.s"
-if ! cmp -s "$OUT/c3_return.s" "$ROOT_DIR/tests/c3_return.s"; then
+"$BIN" --emit-asm "$ROOT_DIR/tests/c3_return.c" > "$OUT_TMP/c3_return.s"
+if ! cmp -s "$OUT_TMP/c3_return.s" "$ROOT_DIR/tests/c3_return.s"; then
   echo "FAIL c3_return_asm" >&2
   exit 1
 fi
 echo "PASS c3_return_asm"
 
-"$BIN" --emit-asm "$ROOT_DIR/tests/c3_add.c" > "$OUT/c3_add.s"
-if ! cmp -s "$OUT/c3_add.s" "$ROOT_DIR/tests/c3_add.s"; then
+"$BIN" --emit-asm "$ROOT_DIR/tests/c3_add.c" > "$OUT_TMP/c3_add.s"
+if ! cmp -s "$OUT_TMP/c3_add.s" "$ROOT_DIR/tests/c3_add.s"; then
   echo "FAIL c3_add_asm" >&2
   exit 1
 fi
 echo "PASS c3_add_asm"
 
-"$BIN" --emit-asm "$ROOT_DIR/tests/c3_mul.c" > "$OUT/c3_mul.s"
-if ! cmp -s "$OUT/c3_mul.s" "$ROOT_DIR/tests/c3_mul.s"; then
+"$BIN" --emit-asm "$ROOT_DIR/tests/c3_mul.c" > "$OUT_TMP/c3_mul.s"
+if ! cmp -s "$OUT_TMP/c3_mul.s" "$ROOT_DIR/tests/c3_mul.s"; then
   echo "FAIL c3_mul_asm" >&2
   exit 1
 fi
 echo "PASS c3_mul_asm"
 
 # c3 simulator smoke checks (halts on exit)
-"$BIN" -o "$OUT/c3_return.elf" "$ROOT_DIR/tests/c3_return.c"
-OUT_LOG=$("$SIM" "$OUT/c3_return.elf" 2>&1 || true)
+"$BIN" -o "$OUT_ELF/c3_return.elf" "$ROOT_DIR/tests/c3_return.c"
+OUT_LOG=$("$SIM" "$OUT_ELF/c3_return.elf" 2>&1 || true)
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c3_return_sim" >&2; exit 1; }
 echo "PASS c3_return_sim"
 
-"$BIN" -o "$OUT/c3_add.elf" "$ROOT_DIR/tests/c3_add.c"
-OUT_LOG=$("$SIM" "$OUT/c3_add.elf" 2>&1 || true)
+"$BIN" -o "$OUT_ELF/c3_add.elf" "$ROOT_DIR/tests/c3_add.c"
+OUT_LOG=$("$SIM" "$OUT_ELF/c3_add.elf" 2>&1 || true)
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c3_add_sim" >&2; exit 1; }
 echo "PASS c3_add_sim"
 
-"$BIN" -o "$OUT/c3_mul.elf" "$ROOT_DIR/tests/c3_mul.c"
-OUT_LOG=$("$SIM" "$OUT/c3_mul.elf" 2>&1 || true)
+"$BIN" -o "$OUT_ELF/c3_mul.elf" "$ROOT_DIR/tests/c3_mul.c"
+OUT_LOG=$("$SIM" "$OUT_ELF/c3_mul.elf" 2>&1 || true)
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c3_mul_sim" >&2; exit 1; }
 echo "PASS c3_mul_sim"
 
 # c4 asm output checks
-"$BIN" --emit-asm "$ROOT_DIR/tests/c4_vars.c" > "$OUT/c4_vars.s"
-if ! cmp -s "$OUT/c4_vars.s" "$ROOT_DIR/tests/c4_vars.s"; then
+"$BIN" --emit-asm "$ROOT_DIR/tests/c4_vars.c" > "$OUT_TMP/c4_vars.s"
+if ! cmp -s "$OUT_TMP/c4_vars.s" "$ROOT_DIR/tests/c4_vars.s"; then
   echo "FAIL c4_vars_asm" >&2
   exit 1
 fi
 echo "PASS c4_vars_asm"
 
-"$BIN" --emit-asm "$ROOT_DIR/tests/c4_reassign.c" > "$OUT/c4_reassign.s"
-if ! cmp -s "$OUT/c4_reassign.s" "$ROOT_DIR/tests/c4_reassign.s"; then
+"$BIN" --emit-asm "$ROOT_DIR/tests/c4_reassign.c" > "$OUT_TMP/c4_reassign.s"
+if ! cmp -s "$OUT_TMP/c4_reassign.s" "$ROOT_DIR/tests/c4_reassign.s"; then
   echo "FAIL c4_reassign_asm" >&2
   exit 1
 fi
 echo "PASS c4_reassign_asm"
 
 # c4 simulator smoke checks
-"$BIN" -o "$OUT/c4_vars.elf" "$ROOT_DIR/tests/c4_vars.c"
-OUT_LOG=$("$SIM" "$OUT/c4_vars.elf" 2>&1 || true)
+"$BIN" -o "$OUT_ELF/c4_vars.elf" "$ROOT_DIR/tests/c4_vars.c"
+OUT_LOG=$("$SIM" "$OUT_ELF/c4_vars.elf" 2>&1 || true)
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c4_vars_sim" >&2; exit 1; }
 echo "PASS c4_vars_sim"
 
-"$BIN" -o "$OUT/c4_reassign.elf" "$ROOT_DIR/tests/c4_reassign.c"
-OUT_LOG=$("$SIM" "$OUT/c4_reassign.elf" 2>&1 || true)
+"$BIN" -o "$OUT_ELF/c4_reassign.elf" "$ROOT_DIR/tests/c4_reassign.c"
+OUT_LOG=$("$SIM" "$OUT_ELF/c4_reassign.elf" 2>&1 || true)
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c4_reassign_sim" >&2; exit 1; }
 echo "PASS c4_reassign_sim"
 
 # c5 asm output checks
-"$BIN" --emit-asm "$ROOT_DIR/tests/c5_if.c" > "$OUT/c5_if.s"
-if ! cmp -s "$OUT/c5_if.s" "$ROOT_DIR/tests/c5_if.s"; then
+"$BIN" --emit-asm "$ROOT_DIR/tests/c5_if.c" > "$OUT_TMP/c5_if.s"
+if ! cmp -s "$OUT_TMP/c5_if.s" "$ROOT_DIR/tests/c5_if.s"; then
   echo "FAIL c5_if_asm" >&2
   exit 1
 fi
 echo "PASS c5_if_asm"
 
-"$BIN" --emit-asm "$ROOT_DIR/tests/c5_while.c" > "$OUT/c5_while.s"
-if ! cmp -s "$OUT/c5_while.s" "$ROOT_DIR/tests/c5_while.s"; then
+"$BIN" --emit-asm "$ROOT_DIR/tests/c5_while.c" > "$OUT_TMP/c5_while.s"
+if ! cmp -s "$OUT_TMP/c5_while.s" "$ROOT_DIR/tests/c5_while.s"; then
   echo "FAIL c5_while_asm" >&2
   exit 1
 fi
 echo "PASS c5_while_asm"
 
 # c5 simulator smoke checks
-"$BIN" -o "$OUT/c5_if.elf" "$ROOT_DIR/tests/c5_if.c"
-OUT_LOG=$("$SIM" "$OUT/c5_if.elf" 2>&1 || true)
+"$BIN" -o "$OUT_ELF/c5_if.elf" "$ROOT_DIR/tests/c5_if.c"
+OUT_LOG=$("$SIM" "$OUT_ELF/c5_if.elf" 2>&1 || true)
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c5_if_sim" >&2; exit 1; }
 echo "PASS c5_if_sim"
 
-"$BIN" -o "$OUT/c5_while.elf" "$ROOT_DIR/tests/c5_while.c"
-OUT_LOG=$("$SIM" "$OUT/c5_while.elf" 2>&1 || true)
+"$BIN" -o "$OUT_ELF/c5_while.elf" "$ROOT_DIR/tests/c5_while.c"
+OUT_LOG=$("$SIM" "$OUT_ELF/c5_while.elf" 2>&1 || true)
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL c5_while_sim" >&2; exit 1; }
 echo "PASS c5_while_sim"
 
 # c6 asm output checks
-"$BIN" --emit-asm "$ROOT_DIR/tests/c6_call.c" > "$OUT/c6_call.s"
-if ! cmp -s "$OUT/c6_call.s" "$ROOT_DIR/tests/c6_call.s"; then
+"$BIN" --emit-asm "$ROOT_DIR/tests/c6_call.c" > "$OUT_TMP/c6_call.s"
+if ! cmp -s "$OUT_TMP/c6_call.s" "$ROOT_DIR/tests/c6_call.s"; then
   echo "FAIL c6_call_asm" >&2
   exit 1
 fi
 echo "PASS c6_call_asm"
 
-"$BIN" --emit-asm "$ROOT_DIR/tests/c6_nested.c" > "$OUT/c6_nested.s"
-if ! cmp -s "$OUT/c6_nested.s" "$ROOT_DIR/tests/c6_nested.s"; then
+"$BIN" --emit-asm "$ROOT_DIR/tests/c6_nested.c" > "$OUT_TMP/c6_nested.s"
+if ! cmp -s "$OUT_TMP/c6_nested.s" "$ROOT_DIR/tests/c6_nested.s"; then
   echo "FAIL c6_nested_asm" >&2
   exit 1
 fi
 echo "PASS c6_nested_asm"
 
 # label uniqueness in multi-function asm
-"$BIN" --emit-asm "$ROOT_DIR/tests/c_label_unique.c" > "$OUT/c_label_unique.s"
-LABEL_DUPS=$(grep -E '^\.L[0-9]+:' "$OUT/c_label_unique.s" | sort | uniq -d)
+"$BIN" --emit-asm "$ROOT_DIR/tests/c_label_unique.c" > "$OUT_TMP/c_label_unique.s"
+LABEL_DUPS=$(grep -E '^\.L[0-9]+:' "$OUT_TMP/c_label_unique.s" | sort | uniq -d)
 if [ -n "$LABEL_DUPS" ]; then
   echo "FAIL c_label_unique_labels" >&2
   echo "$LABEL_DUPS" >&2

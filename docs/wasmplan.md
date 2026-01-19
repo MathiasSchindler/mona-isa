@@ -37,7 +37,7 @@ Goal: Compile the MINA simulator to WebAssembly so it runs in a browser with a c
 
 5. **Sample binaries**
    - Place a small curated set under `wasm/binaries/` (e.g., hello, fib, prime, struct/union).
-   - Add a script to copy from `compiler/tests/out/` (or regenerate) into `wasm/binaries/`.
+   - Add a script to copy from `out/elf/` (or regenerate) into `wasm/binaries/`.
 
 6. **Output capture**
    - Redirect stdout/stderr from the WASM module into the UI.

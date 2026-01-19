@@ -11,6 +11,7 @@ $(BIN): $(SRC)
 
 clean:
 	rm -f $(BIN)
+	rm -rf tests/out
 
 status:
 	@printf "MINA status (simulator)\n\n"
