@@ -2,6 +2,8 @@
 
 This document defines relocation behavior for `movhi`/`addi` and related constant materialization.
 
+**Status:** Relocations are specified here but are **not implemented** in the current toolchain. The assembler emits a single ELF image without relocation records, and there is no linker or relocation processing yet. Treat these rules as a forward-looking spec.
+
 ---
 
 ## 1. Relocation Sequences
@@ -66,7 +68,7 @@ This enables position-independent code for local references.
 ## 3. PC-Relative Rules
 
 - `jal` and branch offsets are relative to the address of the instruction.
-- The assembler emits relocation records for unresolved symbols.
+- The assembler does **not** currently emit relocation records; unresolved symbol handling is out of scope for now.
 
 ---
 
@@ -85,7 +87,7 @@ v1 does **not** define GOT/PLT relocations. Position-independent executables are
 
 ## 6. Linker Constraints
 
-The linker must ensure the `movhi`/`addi` pair remains adjacent. v1 does not define any relaxation rules; linkers must not rewrite or relax these sequences.
+The linker must ensure the `movhi`/`addi` pair remains adjacent. v1 does not define any relaxation rules; linkers must not rewrite or relax these sequences. This is not implemented yet and is documented as a target behavior.
 
 ## 7. Relaxation (Reserved)
 

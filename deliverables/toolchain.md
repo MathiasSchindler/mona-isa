@@ -18,6 +18,7 @@ This document describes the MINA assembler (mina-as) and current linker/ELF hand
 
 ## Limitations
 - No full linker: no relocation processing, no symbol resolution across objects.
+- No relocation expressions (`%hi/%lo`) or relocation records in output.
 - No separate object files or archives; input is a single .s file.
 - No section layout control beyond .org/.align.
 - Minimal ELF metadata (no section headers, no debug info).

@@ -12,9 +12,10 @@ This document defines the supported C subset and known limitations of the MINA C
 
 ## 2. Invocation
 
-- `minac [--emit-ir] [--emit-asm] [--bin] [-O] [-o out.elf] <file.c>`
+- `minac [--emit-ir] [--emit-asm] [--bin] [--no-start] [-O] [-o out.elf] <file.c>`
 - When `-o` is provided, `mina-as` is invoked to produce the output.
 - `--bin` emits a raw `.bin` image (requires `-o`).
+- `--no-start` omits the default `_start` stub for library-style assembly output.
 - `-O` enables IR constant folding and dead-code elimination.
 
 ---
@@ -23,27 +24,28 @@ This document defines the supported C subset and known limitations of the MINA C
 
 ### 3.1 Types
 
-- `int`
-- `char`
-- `void` (function return type)
-- `int *` (pointers)
-- Global `int` arrays with constant size and optional constant initializers
-- `char *` for string literals and pointer operations
+- `int`, `char`, `void` (function return type)
+- Pointers to `int`/`char` and pointer-to-struct/union
+- `enum` declarations (compile-time integer values)
+- `struct` and `union` declarations (named, with field access)
+- Global and local arrays with constant size and optional constant initializers
+- String literals (`char *`) stored in `.data`
 
 ### 3.2 Expressions
 
-- Integer literals and identifiers
+- Integer and character literals, identifiers
 - Binary ops: `+ - * /`, comparisons `== != < <= > >=`
 - Logical ops: `&& || !` (short-circuit lowering)
 - Unary ops: `+ - & *`
 - Indexing: `a[i]` (scaled by element size)
+- `sizeof` for types and expressions
 - Function calls (up to 8 arguments)
 
 ### 3.3 Statements
 
 - `return`
 - Local declarations with optional initializer (`int x = ...;`)
-- Assignment to variables, dereferences, and indices
+- Assignment to variables, dereferences, fields, and indices
 - `if` / `else`
 - `while`
 - `for`
@@ -58,6 +60,7 @@ This document defines the supported C subset and known limitations of the MINA C
 - MINA ABI per [deliverables/abi.md](deliverables/abi.md)
 - Syscalls: `write`, `read`, `exit` (simulator ABI)
 - Built-ins: `puts`, `putchar`, `exit` (mapped to syscalls)
+- Optional clib support via `#include "clib.h"` (limited include search)
 
 ---
 
@@ -70,13 +73,12 @@ This document defines the supported C subset and known limitations of the MINA C
 
 ## 6. Known Limitations
 
-- No `struct`/`union`/`enum`/`typedef`.
-- No arrays of locals (only global `int` arrays).
-- No pointer arithmetic beyond indexing.
-- No floating-point support.
-- No preprocessor (`#include`, `#define`).
+- No `typedef`, `const`, `volatile`, or bitfields.
+- No floating-point types or operations.
+- No function pointers.
 - No variadic functions.
-- No full type checking; minimal validation only.
+- Preprocessor is minimal: only `#include "clib.h"` is supported; no `#define` or general include paths.
+- Limited type checking and diagnostics compared to a full C compiler.
 
 ---
 

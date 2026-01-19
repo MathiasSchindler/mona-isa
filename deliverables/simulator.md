@@ -4,7 +4,7 @@
 This document describes the software simulator for the MINA architecture: what it implements, what it omits, and known behavioral constraints.
 
 ## Capabilities
-- Executes MINA base integer ISA (implemented subset) with arithmetic, logic, branches, jumps, loads/stores, and system ops.
+- Executes a subset of the MINA base integer ISA with arithmetic, logic, branches, jumps, loads/stores, and system ops.
 - Implements M-extension ops: `mul`, `mulh`, `mulhsu`, `mulhu`, `div`, `divu`, `rem`, `remu`.
 - Implements CSR subset for M/S-mode control and trap handling.
 - Implements CSR counters: `cycle`, `time`, `instret` (read-only).

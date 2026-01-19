@@ -70,3 +70,9 @@
 - **Traps**: illegal instruction, misaligned load/store, ecall delegation.
 - **CAP**: tag check, bounds/perm faults.
 - **Tensor**: FP8/FP4 formats, stride handling.
+
+## Deliverables Gaps (from docs)
+
+- Add relocation expressions (`%hi/%lo`) and emit relocation records in the assembler.
+- Implement a minimal linker or relocation pass to resolve symbol references across inputs.
+- Audit ISA/CSR coverage vs. deliverables and add tests for any missing instructions or CSR behaviors.

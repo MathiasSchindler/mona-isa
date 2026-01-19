@@ -22,7 +22,8 @@ This document defines the supported feature set and known limitations of the MIN
 ## 3. Supported Directives
 
 - **Sections:** `.text`, `.data`, `.rodata`.
-- **Data:** `.byte`, `.dword`.
+- **Placement:** `.org` (set location counter).
+- **Data:** `.byte`, `.half`, `.word`, `.dword`, `.ascii`, `.asciz`.
 - **Alignment:** `.align` (power-of-two alignment).
 - **Symbols:** label definitions for code and data.
 - **Ignored:** `.file`, `.loc` (accepted and ignored for toolchain compatibility).
@@ -32,14 +33,15 @@ This document defines the supported feature set and known limitations of the MIN
 ## 4. Instruction Support
 
 - Accepts the current MINA ISA as documented in [deliverables/isa.md](deliverables/isa.md).
-- Emits relocations as specified in [deliverables/relocations.md](deliverables/relocations.md).
+- Supports CSR, CAP, and TENSOR instruction encodings.
+- Pseudo-instructions: `nop`, `mov`, `not`, `ret`, `j`, `jr`, `li`.
 
 ---
 
 ## 5. Linking and Layout
 
-- Produces a single executable image.
-- ELF layout and relocation behavior follow [deliverables/toolchain.md](deliverables/toolchain.md).
+- Produces a single executable image (ELF64 by default).
+- ELF output is a single PT_LOAD segment, suitable for the simulator loader.
 - For `--bin`, base addresses can be specified (used by the compiler integration).
 
 ---
@@ -55,6 +57,7 @@ This document defines the supported feature set and known limitations of the MIN
 
 - No macro system or conditional assembly.
 - No include directives.
+- No relocation expressions or cross-file linking.
 - No debug symbol emission.
 - Directive set is intentionally minimal (only the directives listed above are guaranteed).
 
