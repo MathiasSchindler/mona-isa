@@ -12,7 +12,7 @@
 #include "opt.h"
 
 static void print_usage(const char *prog) {
-    fprintf(stderr, "usage: %s [--emit-ir] [--emit-asm] [--bin] [-O] [--max-errors N] [-o out.elf] <file.c>\n", prog);
+    fprintf(stderr, "usage: %s [--emit-ir] [--emit-asm] [--bin] [--prefer-libc] [-O] [--max-errors N] [-o out.elf] <file.c>\n", prog);
 }
 
 static char *dup_string(const char *s) {
@@ -79,7 +79,8 @@ int main(int argc, char **argv) {
     int emit_bin = 0;
     int optimize = 0;
     int max_errors = 5;
-        int emit_start = 1;
+    int emit_start = 1;
+    int prefer_libc = 0;
     const char *output_path = NULL;
     const char *path = NULL;
 
@@ -90,8 +91,10 @@ int main(int argc, char **argv) {
             emit_asm = 1;
         } else if (strcmp(argv[i], "--bin") == 0) {
             emit_bin = 1;
-            } else if (strcmp(argv[i], "--no-start") == 0) {
-                emit_start = 0;
+        } else if (strcmp(argv[i], "--no-start") == 0) {
+            emit_start = 0;
+        } else if (strcmp(argv[i], "--prefer-libc") == 0) {
+            prefer_libc = 1;
         } else if (strcmp(argv[i], "--max-errors") == 0) {
             if (i + 1 >= argc) { print_usage(argv[0]); return 1; }
             max_errors = atoi(argv[++i]);
@@ -149,7 +152,7 @@ int main(int argc, char **argv) {
 
     IRProgram ir;
     ir_init(&ir);
-    if (!lower_program(program, &ir, &err)) {
+    if (!lower_program(program, &ir, prefer_libc, &err)) {
         fprintf(stderr, "%s\n", err ? err : "error: lower failed");
         free(err);
         ir_free(&ir);

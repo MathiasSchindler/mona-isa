@@ -86,6 +86,13 @@ echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL n4_init_struct_sim" >&2; exit 1; 
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL n4_init_struct_sim" >&2; exit 1; }
 echo "PASS n4_init_struct_sim"
 
+# n9_ifdef.c: preprocessor ifdef/ifndef/undef
+"$BIN" -o "$OUT_ELF/n9_ifdef.elf" "$ROOT_DIR/tests/n9_ifdef.c"
+OUT_LOG=$("$SIM" "$OUT_ELF/n9_ifdef.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL n9_ifdef_sim" >&2; exit 1; }
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL n9_ifdef_sim" >&2; exit 1; }
+echo "PASS n9_ifdef_sim"
+
 # l0_putchar.c: builtin putchar
 "$BIN" -o "$OUT_ELF/l0_putchar.elf" "$ROOT_DIR/tests/l0_putchar.c"
 OUT_LOG=$("$SIM" "$OUT_ELF/l0_putchar.elf" 2>&1 || true)
@@ -180,6 +187,33 @@ echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL l5_strtol_sim" >&2; exit 1; }
 echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l5_strtol_sim" >&2; exit 1; }
 echo "PASS l5_strtol_sim"
 
+# l6_write.c: clib write
+"$BIN" --emit-asm "$ROOT_DIR/tests/l6_write.c" > "$OUT_TMP/l6_write.s"
+cat "$OUT_TMP/l6_write.s" "$OUT_TMP/clib.lib.s" > "$OUT_TMP/l6_write_full.s"
+"$AS" --data-base 0x4000 "$OUT_TMP/l6_write_full.s" -o "$OUT_ELF/l6_write.elf"
+OUT_LOG=$("$SIM" "$OUT_ELF/l6_write.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL l6_write_sim" >&2; exit 1; }
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l6_write_sim" >&2; exit 1; }
+echo "PASS l6_write_sim"
+
+# l7_malloc.c: clib malloc/free/calloc/realloc
+"$BIN" --emit-asm "$ROOT_DIR/tests/l7_malloc.c" > "$OUT_TMP/l7_malloc.s"
+cat "$OUT_TMP/clib.lib.s" "$OUT_TMP/l7_malloc.s" > "$OUT_TMP/l7_malloc_full.s"
+"$AS" --data-base 0x4000 "$OUT_TMP/l7_malloc_full.s" -o "$OUT_ELF/l7_malloc.elf"
+OUT_LOG=$("$SIM" "$OUT_ELF/l7_malloc.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL l7_malloc_sim" >&2; exit 1; }
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l7_malloc_sim" >&2; exit 1; }
+echo "PASS l7_malloc_sim"
+
+# l8_libc_calls.c: prefer libc calls over intrinsics
+"$BIN" --emit-asm --prefer-libc "$ROOT_DIR/tests/l8_libc_calls.c" > "$OUT_TMP/l8_libc_calls.s"
+cat "$OUT_TMP/clib.lib.s" "$OUT_TMP/l8_libc_calls.s" > "$OUT_TMP/l8_libc_calls_full.s"
+"$AS" --data-base 0x4000 "$OUT_TMP/l8_libc_calls_full.s" -o "$OUT_ELF/l8_libc_calls.elf"
+OUT_LOG=$("$SIM" "$OUT_ELF/l8_libc_calls.elf" 2>&1 || true)
+echo "$OUT_LOG" | grep -q "OK" || { echo "FAIL l8_libc_calls_sim" >&2; exit 1; }
+echo "$OUT_LOG" | grep -q "halted on ebreak" || { echo "FAIL l8_libc_calls_sim" >&2; exit 1; }
+echo "PASS l8_libc_calls_sim"
+
 # c2_ir.c: should lower and match IR output
 "$BIN" --emit-ir "$ROOT_DIR/tests/c2_ir.c" > "$ROOT_DIR/tests/c2_ir.out"
 if ! cmp -s "$ROOT_DIR/tests/c2_ir.out" "$ROOT_DIR/tests/c2_ir.txt"; then
@@ -188,6 +222,17 @@ if ! cmp -s "$ROOT_DIR/tests/c2_ir.out" "$ROOT_DIR/tests/c2_ir.txt"; then
 fi
 rm -f "$ROOT_DIR/tests/c2_ir.out"
 echo "PASS c2_ir"
+
+# n7_cse.c: CSE and strength reduction (-O) should match IR output
+"$BIN" --emit-ir -O "$ROOT_DIR/tests/n7_cse.c" > "$ROOT_DIR/tests/n7_cse.out"
+grep -v '^[[:space:]]*$' "$ROOT_DIR/tests/n7_cse.out" > "$ROOT_DIR/tests/n7_cse.out.strip"
+grep -v '^[[:space:]]*$' "$ROOT_DIR/tests/n7_cse.txt" > "$ROOT_DIR/tests/n7_cse.txt.strip"
+if ! cmp -s "$ROOT_DIR/tests/n7_cse.out.strip" "$ROOT_DIR/tests/n7_cse.txt.strip"; then
+  echo "FAIL n7_cse" >&2
+  exit 1
+fi
+rm -f "$ROOT_DIR/tests/n7_cse.out" "$ROOT_DIR/tests/n7_cse.out.strip" "$ROOT_DIR/tests/n7_cse.txt.strip"
+echo "PASS n7_cse"
 
 # c2_ir_err.c: should fail in lowering
 if "$BIN" --emit-ir "$ROOT_DIR/tests/c2_ir_err.c" >/dev/null 2>&1; then

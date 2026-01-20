@@ -15,3 +15,11 @@ int isspace(int c);
 
 int atoi(char *s);
 int strtol(char *s, int *end, int base);
+
+int write(int fd, char *buf, int len);
+int read(int fd, char *buf, int len);
+
+char *malloc(int n);
+void free(char *p);
+char *calloc(int n, int size);
+char *realloc(char *p, int n);

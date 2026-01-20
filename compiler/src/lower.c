@@ -267,6 +267,7 @@ static int locals_mark_addressable(LocalMap *map, const char *name) {
 }
 
 static int lower_addr(const Expr *expr, IRProgram *ir, LocalMap *locals, GlobalMap *globals, char **out_error);
+static int g_prefer_libc = 0;
 static int lower_expr(const Expr *expr, IRProgram *ir, LocalMap *locals, GlobalMap *globals, char **out_error);
 
 static int lower_index_addr(const Expr *expr, IRProgram *ir, LocalMap *locals, GlobalMap *globals, char **out_error) {
@@ -532,7 +533,9 @@ static int lower_expr(const Expr *expr, IRProgram *ir, LocalMap *locals, GlobalM
             return ir_emit_bin(ir, expr->as.bin.op, lhs, rhs);
         }
         case EXPR_CALL: {
-            if (expr->as.call.arg_count == 1 && strcmp(expr->as.call.name, "puts") == 0) {
+            int prefer = g_prefer_libc;
+            const char *fname = expr->as.call.name;
+            if (expr->as.call.arg_count == 1 && (!prefer && strcmp(fname, "puts") == 0)) {
                 const Expr *arg = expr->as.call.args[0];
                 int addr_temp = -1;
                 size_t len = 0;
@@ -555,7 +558,8 @@ static int lower_expr(const Expr *expr, IRProgram *ir, LocalMap *locals, GlobalM
                 }
                 return ir_emit_write(ir, addr_temp, len);
             }
-            if (expr->as.call.arg_count == 1 && strcmp(expr->as.call.name, "putchar") == 0) {
+            if (expr->as.call.arg_count == 1 &&
+                (strcmp(fname, "__minac_putchar") == 0 || (!prefer && strcmp(fname, "putchar") == 0))) {
                 int ch_temp = lower_expr(expr->as.call.args[0], ir, locals, globals, out_error);
                 if (ch_temp < 0) return -1;
                 char *label = dup_label(".Lputc", globals ? globals->byte_count++ : 0);
@@ -566,7 +570,8 @@ static int lower_expr(const Expr *expr, IRProgram *ir, LocalMap *locals, GlobalM
                 ir_emit_store8(ir, addr_temp, ch_temp);
                 return ir_emit_write(ir, addr_temp, 1);
             }
-            if (expr->as.call.arg_count == 1 && strcmp(expr->as.call.name, "exit") == 0) {
+            if (expr->as.call.arg_count == 1 &&
+                (strcmp(fname, "__minac_exit") == 0 || (!prefer && strcmp(fname, "exit") == 0))) {
                 int code_temp = lower_expr(expr->as.call.args[0], ir, locals, globals, out_error);
                 if (code_temp < 0) return -1;
                 ir_emit_exit(ir, code_temp);
@@ -944,8 +949,9 @@ static int lower_stmt(const Stmt *stmt, IRProgram *ir, LocalMap *locals, GlobalM
     }
 }
 
-int lower_program(const Program *program, IRProgram *ir, char **out_error) {
+int lower_program(const Program *program, IRProgram *ir, int prefer_libc, char **out_error) {
     if (out_error) *out_error = NULL;
+    g_prefer_libc = prefer_libc;
     if (!program || !program->funcs || program->func_count == 0) {
         if (out_error) *out_error = dup_error_simple("error: invalid program");
         return 0;

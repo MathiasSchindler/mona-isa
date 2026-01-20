@@ -31,7 +31,12 @@ Assumption: Use `mina-as` for assembly and linking (yes, that is the intended pa
 **Tests**
 - `tests/n2_const_init.c`: constant expressions in globals/locals.
 
-**Status:** Done (const-eval for scalar global initializers; locals already supported).
+**Status:** Done.
+
+**Notes**
+- Global scalar and aggregate initializers are evaluated as constant expressions.
+- Supported operators include `+`, `-`, `*`, `/`, unary `+`/`-`, and parentheses; `sizeof` is accepted where applicable.
+- Local initializers accept full expressions at runtime, so constant-only restrictions do not apply there.
 
 ### Milestone N3 — Enum Types
 **Scope**
@@ -95,6 +100,12 @@ Assumption: Use `mina-as` for assembly and linking (yes, that is the intended pa
 **Tests**
 - `tests/n7_cse.c`: repeated subexpression elimination.
 
+**Status:** Done.
+
+**Notes**
+- Local value numbering removes duplicate loads and pure binary ops within a basic block.
+- Strength reduction rewrites `x * 2` to `x + x` (and folds trivial `* 0`/`* 1`).
+
 ### Milestone N8 — Better Calling Convention Stress
 **Scope**
 - Validate >8 args and stack-passed arguments.
@@ -116,6 +127,12 @@ Assumption: Use `mina-as` for assembly and linking (yes, that is the intended pa
 
 **Tests**
 - `tests/n9_ifdef.c`: conditional compilation paths.
+
+**Status:** Done.
+
+**Notes**
+- Added `#ifdef`, `#ifndef`, `#endif`, and `#undef` to the preprocessor.
+- Directives inside inactive blocks are skipped except for conditional nesting.
 
 ### Milestone N10 — Compiler/Assembler Regression Suite
 **Scope**

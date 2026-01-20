@@ -1,5 +1,27 @@
 #include "clib.h"
 
+int __minac_putchar(int c);
+void __minac_exit(int code);
+
+int putchar(int c) {
+    return __minac_putchar(c);
+}
+
+int puts(char *s) {
+    int n = 0;
+    if (!s) return 0;
+    while (*s) {
+        putchar(*s);
+        n = n + 1;
+        s = s + 1;
+    }
+    return n;
+}
+
+void exit(int code) {
+    __minac_exit(code);
+}
+
 int strlen(char *s) {
     int n = 0;
     if (!s) return 0;
@@ -159,4 +181,54 @@ int strtol(char *s, int *end, int base) {
 
 int atoi(char *s) {
     return strtol(s, 0, 10);
+}
+
+int write(int fd, char *buf, int len) {
+    int i = 0;
+    if (!buf) return 0;
+    if (len <= 0) return 0;
+    if (fd == 1 || fd == 2) {
+        while (i < len) {
+            putchar(buf[i]);
+            i = i + 1;
+        }
+        return len;
+    }
+    return 0;
+}
+
+int read(int fd, char *buf, int len) {
+    if (!buf) return 0;
+    if (len <= 0) return 0;
+    if (fd != 0) return 0;
+    return 0;
+}
+
+int clib_heap[8];
+int clib_heap_used = 0;
+
+char *malloc(int n) {
+    if (n <= 0) return 0;
+    if (clib_heap_used != 0) return 0;
+    clib_heap_used = 1;
+    return clib_heap;
+}
+
+void free(char *p) {
+    if (p == clib_heap) clib_heap_used = 0;
+    return;
+}
+
+char *calloc(int n, int size) {
+    int total = n * size;
+    char *p = malloc(total);
+    if (!p) return 0;
+    memset(p, 0, total);
+    return p;
+}
+
+char *realloc(char *p, int n) {
+    if (!p) return malloc(n);
+    if (n <= 0) return 0;
+    return p;
 }

@@ -134,6 +134,18 @@ static int macro_set(MacroTable *t, const char *name, size_t name_len, const cha
     return 1;
 }
 
+static void macro_unset(MacroTable *t, const char *name, size_t name_len) {
+    for (size_t i = 0; i < t->count; i++) {
+        if (strlen(t->items[i].name) == name_len && strncmp(t->items[i].name, name, name_len) == 0) {
+            free(t->items[i].name);
+            free(t->items[i].value);
+            if (i + 1 < t->count) memmove(&t->items[i], &t->items[i + 1], (t->count - i - 1) * sizeof(Macro));
+            t->count--;
+            return;
+        }
+    }
+}
+
 static const char *skip_ws(const char *s) {
     while (*s == ' ' || *s == '\t') s++;
     return s;
@@ -239,6 +251,9 @@ static int preprocess_file(const char *path, MacroTable *macros, Buffer *out, ch
         if (out_error && !*out_error) *out_error = dup_error_path("error: include not found", path);
         return 0;
     }
+    int cond_stack[64];
+    int cond_top = 0;
+    cond_stack[cond_top++] = 1;
     const char *p = src;
     while (*p) {
         const char *line_start = p;
@@ -249,7 +264,53 @@ static int preprocess_file(const char *path, MacroTable *macros, Buffer *out, ch
         if (*s == '#') {
             s++;
             s = skip_ws(s);
-            if (strncmp(s, "include", 7) == 0 && (s[7] == ' ' || s[7] == '\t' || s[7] == '"')) {
+            if (strncmp(s, "ifdef", 5) == 0 && (s[5] == ' ' || s[5] == '\t')) {
+                s += 5;
+                s = skip_ws(s);
+                const char *name = s;
+                if (!isalpha((unsigned char)*name) && *name != '_') {
+                    if (out_error && !*out_error) *out_error = dup_error("error: invalid macro name");
+                    free(src);
+                    return 0;
+                }
+                s++;
+                while (isalnum((unsigned char)*s) || *s == '_') s++;
+                size_t name_len = (size_t)(s - name);
+                int defined = macro_find(macros, name, name_len) != NULL;
+                int active = cond_stack[cond_top - 1] && defined;
+                if (cond_top >= 64) { if (out_error && !*out_error) *out_error = dup_error("error: too many nested conditionals"); free(src); return 0; }
+                cond_stack[cond_top++] = active;
+                if (!buf_append_n(out, "\n", 1)) { if (out_error && !*out_error) *out_error = dup_error("error: out of memory"); free(src); return 0; }
+            } else if (strncmp(s, "ifndef", 6) == 0 && (s[6] == ' ' || s[6] == '\t')) {
+                s += 6;
+                s = skip_ws(s);
+                const char *name = s;
+                if (!isalpha((unsigned char)*name) && *name != '_') {
+                    if (out_error && !*out_error) *out_error = dup_error("error: invalid macro name");
+                    free(src);
+                    return 0;
+                }
+                s++;
+                while (isalnum((unsigned char)*s) || *s == '_') s++;
+                size_t name_len = (size_t)(s - name);
+                int defined = macro_find(macros, name, name_len) != NULL;
+                int active = cond_stack[cond_top - 1] && !defined;
+                if (cond_top >= 64) { if (out_error && !*out_error) *out_error = dup_error("error: too many nested conditionals"); free(src); return 0; }
+                cond_stack[cond_top++] = active;
+                if (!buf_append_n(out, "\n", 1)) { if (out_error && !*out_error) *out_error = dup_error("error: out of memory"); free(src); return 0; }
+            } else if (strncmp(s, "endif", 5) == 0 && (s[5] == '\0' || isspace((unsigned char)s[5]))) {
+                if (cond_top <= 1) {
+                    if (out_error && !*out_error) *out_error = dup_error("error: #endif without #if");
+                    free(src);
+                    return 0;
+                }
+                cond_top--;
+                if (!buf_append_n(out, "\n", 1)) { if (out_error && !*out_error) *out_error = dup_error("error: out of memory"); free(src); return 0; }
+            } else if (strncmp(s, "include", 7) == 0 && (s[7] == ' ' || s[7] == '\t' || s[7] == '"')) {
+                if (!cond_stack[cond_top - 1]) {
+                    if (!buf_append_n(out, "\n", 1)) { if (out_error && !*out_error) *out_error = dup_error("error: out of memory"); free(src); return 0; }
+                    goto next_line;
+                }
                 s += 7;
                 s = skip_ws(s);
                 if (*s == '"') {
@@ -274,6 +335,10 @@ static int preprocess_file(const char *path, MacroTable *macros, Buffer *out, ch
                 }
                 if (!buf_append_n(out, "\n", 1)) { if (out_error && !*out_error) *out_error = dup_error("error: out of memory"); free(src); return 0; }
             } else if (strncmp(s, "define", 6) == 0 && (s[6] == ' ' || s[6] == '\t')) {
+                if (!cond_stack[cond_top - 1]) {
+                    if (!buf_append_n(out, "\n", 1)) { if (out_error && !*out_error) *out_error = dup_error("error: out of memory"); free(src); return 0; }
+                    goto next_line;
+                }
                 s += 6;
                 s = skip_ws(s);
                 const char *name = s;
@@ -306,12 +371,34 @@ static int preprocess_file(const char *path, MacroTable *macros, Buffer *out, ch
                 }
                 free(value);
                 if (!buf_append_n(out, "\n", 1)) { if (out_error && !*out_error) *out_error = dup_error("error: out of memory"); free(src); return 0; }
+            } else if (strncmp(s, "undef", 5) == 0 && (s[5] == ' ' || s[5] == '\t')) {
+                if (!cond_stack[cond_top - 1]) {
+                    if (!buf_append_n(out, "\n", 1)) { if (out_error && !*out_error) *out_error = dup_error("error: out of memory"); free(src); return 0; }
+                    goto next_line;
+                }
+                s += 5;
+                s = skip_ws(s);
+                const char *name = s;
+                if (!isalpha((unsigned char)*name) && *name != '_') {
+                    if (out_error && !*out_error) *out_error = dup_error("error: invalid macro name");
+                    free(src);
+                    return 0;
+                }
+                s++;
+                while (isalnum((unsigned char)*s) || *s == '_') s++;
+                size_t name_len = (size_t)(s - name);
+                macro_unset(macros, name, name_len);
+                if (!buf_append_n(out, "\n", 1)) { if (out_error && !*out_error) *out_error = dup_error("error: out of memory"); free(src); return 0; }
             } else {
                 if (out_error && !*out_error) *out_error = dup_error("error: unsupported preprocessor directive");
                 free(src);
                 return 0;
             }
         } else {
+            if (!cond_stack[cond_top - 1]) {
+                if (!buf_append_n(out, "\n", 1)) { if (out_error && !*out_error) *out_error = dup_error("error: out of memory"); free(src); return 0; }
+                goto next_line;
+            }
             if (!append_expanded_line(line_start, line_len, macros, out)) {
                 if (out_error && !*out_error) *out_error = dup_error("error: out of memory");
                 free(src);
@@ -319,9 +406,14 @@ static int preprocess_file(const char *path, MacroTable *macros, Buffer *out, ch
             }
             if (!buf_append_n(out, "\n", 1)) { if (out_error && !*out_error) *out_error = dup_error("error: out of memory"); free(src); return 0; }
         }
-
+next_line:
         if (!line_end) break;
         p = line_end + 1;
+    }
+    if (cond_top != 1) {
+        if (out_error && !*out_error) *out_error = dup_error("error: unterminated #if");
+        free(src);
+        return 0;
     }
     free(src);
     return 1;

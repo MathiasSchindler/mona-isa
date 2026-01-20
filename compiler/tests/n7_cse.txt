@@ -1,0 +1,28 @@
+global g = 3
+global h = 4
+func main
+t1 = addr g
+t2 = load t1
+t3 = addr h
+t4 = load t3
+t5 = mul t2, t4
+t0 = mov t5
+t11 = mov t5
+t6 = mov t11
+t14 = mov t2
+t16 = add t14, t14
+t12 = mov t16
+t17 = add t0, t6
+t18 = add t17, t12
+return t18
+
+
+
+
+
+
+
+
+
+
+

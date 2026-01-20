@@ -127,6 +127,12 @@ Assumptions:
 **Tests**
 - `tests/l6_write.c`: write to stdout and verify output.
 
+**Status:** Done (minimal implementation).
+
+**Notes**
+- `write` supports `fd=1/2` and writes via repeated `putchar` calls.
+- `read` is a stub that returns 0 (stdin not supported in clib yet).
+
 ## Milestone L7 — Heap allocation (optional)
 **Scope**
 - Implement a tiny `malloc`/`free` using a bump allocator or freelist.
@@ -138,6 +144,15 @@ Assumptions:
 
 **Tests**
 - `tests/l7_malloc.c`: allocate, write, and free memory.
+
+**Status:** Done (simple bump allocator).
+
+**Notes**
+- Fixed-size heap (64 bytes) with a single active allocation.
+- `free` releases the single allocation; multiple concurrent allocations are not supported.
+- `realloc` returns the same pointer and does not grow the allocation.
+- `calloc` zero-fills the allocation using `memset`.
+- Tests cover `malloc`/`free`; `calloc`/`realloc` are minimal.
 
 ## Milestone L8 — Prefer library calls (intrinsics remain optional)
 **Scope**
@@ -151,6 +166,13 @@ Assumptions:
 **Tests**
 - Re-run all library tests to ensure ABI stability.
 
+**Status:** Done.
+
+**Notes**
+- `clib` now provides `putchar`, `puts`, and `exit` wrappers.
+- Compiler flag `--prefer-libc` forces calls to these functions instead of intrinsic lowering.
+- A new test `tests/l8_libc_calls.c` validates the library call path.
+
 ## Milestone L9 — Integration polish (opt-in)
 **Scope**
 - Documentation, versioning, and packaging.
@@ -162,6 +184,12 @@ Assumptions:
 
 **Tests**
 - Full `compiler/tests/run.sh` and library suite.
+
+**Status:** Done.
+
+**Notes**
+- Added clib/README.md, clib/clib.version, and clib/CHANGELOG.md.
+- Added tools/ci_clib.sh as a CI helper to run the clib-related test suite.
 
 ## Notes
 - Keep everything small and deterministic.

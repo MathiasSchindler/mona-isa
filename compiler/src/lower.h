@@ -4,6 +4,6 @@
 #include "ast.h"
 #include "ir.h"
 
-int lower_program(const Program *program, IRProgram *ir, char **out_error);
+int lower_program(const Program *program, IRProgram *ir, int prefer_libc, char **out_error);
 
 #endif
