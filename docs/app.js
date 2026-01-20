@@ -22,11 +22,12 @@ const buildStatusEl = document.getElementById("build-status");
 const templates = [
   {
     label: "hello (OK)",
-    source: "int main(){ putchar(79); putchar(75); putchar(10); return 0; }"
+    source: "#include \"clib.h\"\nint main(){ putchar(79); putchar(75); putchar(10); return 0; }"
   },
   {
     label: "fib (10 terms)",
     source: [
+      "#include \"clib.h\"",
       "int main(){",
       "  int a=0;",
       "  int b=1;",

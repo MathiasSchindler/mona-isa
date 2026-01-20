@@ -17,6 +17,22 @@ async function loadWasmBinary(name) {
   return new Uint8Array(data);
 }
 
+async function loadTextFile(name) {
+  if (isNode) {
+    const { readFile } = await import("node:fs/promises");
+    const { fileURLToPath } = await import("node:url");
+    const { dirname, resolve } = await import("node:path");
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const path = resolve(__dirname, name);
+    return readFile(path, "utf8");
+  }
+  const url = new URL(name, import.meta.url).href;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to load ${name}`);
+  return res.text();
+}
+
 function locateFileFactory(baseUrl) {
   return (path) => new URL(path, baseUrl).href;
 }
@@ -38,6 +54,7 @@ export async function initToolchain({ onStdout = () => {}, onStderr = () => {} }
   const [minac, minaAs, sim, elfInfo] = await Promise.all([
     createMinac({
       noInitialRun: true,
+      noExitRuntime: true,
       print: minacPrint,
       printErr: onStderr,
       wasmBinary: minacWasm || undefined,
@@ -45,6 +62,7 @@ export async function initToolchain({ onStdout = () => {}, onStderr = () => {} }
     }),
     createMinaAs({
       noInitialRun: true,
+      noExitRuntime: true,
       print: onStdout,
       printErr: onStderr,
       wasmBinary: minaAsWasm || undefined,
@@ -52,6 +70,7 @@ export async function initToolchain({ onStdout = () => {}, onStderr = () => {} }
     }),
     createSim({
       noInitialRun: true,
+      noExitRuntime: true,
       print: onStdout,
       printErr: onStderr,
       wasmBinary: simWasm || undefined,
@@ -59,6 +78,7 @@ export async function initToolchain({ onStdout = () => {}, onStderr = () => {} }
     }),
     createElfInfo({
       noInitialRun: true,
+      noExitRuntime: true,
       print: onStdout,
       printErr: onStderr,
       wasmBinary: elfInfoWasm || undefined,
@@ -72,6 +92,19 @@ export async function initToolchain({ onStdout = () => {}, onStderr = () => {} }
     }
   }
 
+  for (const mod of [minac]) {
+    if (!mod.FS.analyzePath("/clib").exists) mod.FS.mkdir("/clib");
+    if (!mod.FS.analyzePath("/clib/include").exists) mod.FS.mkdir("/clib/include");
+    if (!mod.FS.analyzePath("/clib/src").exists) mod.FS.mkdir("/clib/src");
+  }
+
+  const [clibHeader, clibSource] = await Promise.all([
+    loadTextFile("clib.h"),
+    loadTextFile("clib.c")
+  ]);
+  writeFile(minac, "/clib/include/clib.h", new TextEncoder().encode(clibHeader));
+  writeFile(minac, "/clib/src/clib.c", new TextEncoder().encode(clibSource));
+
   function writeFile(mod, path, data) {
     if (mod.FS.analyzePath(path).exists) mod.FS.unlink(path);
     mod.FS.writeFile(path, data);
@@ -82,11 +115,31 @@ export async function initToolchain({ onStdout = () => {}, onStderr = () => {} }
     writeFile(toMod, toPath, data);
   }
 
+  let cachedClibAsm = null;
+
+  function compileClibAsm() {
+    if (cachedClibAsm) return cachedClibAsm;
+    const args = ["--emit-asm", "--no-start", "/clib/src/clib.c"];
+    const captured = [];
+    minacStdout.current = captured;
+    minacStdout.suppress = true;
+    try {
+      minac.callMain(args);
+    } finally {
+      minacStdout.current = null;
+      minacStdout.suppress = false;
+    }
+    cachedClibAsm = `${captured.join("\n")}\n`;
+    return cachedClibAsm;
+  }
+
   function compileC(sourceText, opts = {}) {
     const srcPath = "/data/input.c";
     const asmPath = "/data/out.s";
     writeFile(minac, srcPath, new TextEncoder().encode(sourceText));
     const args = ["--emit-asm"];
+    const withClib = opts.withClib !== false;
+    if (withClib) args.push("--prefer-libc");
     if (opts.optimize) args.push("-O");
     args.push(srcPath);
     const captured = [];
@@ -98,7 +151,11 @@ export async function initToolchain({ onStdout = () => {}, onStderr = () => {} }
       minacStdout.current = null;
       minacStdout.suppress = false;
     }
-    const asmText = `${captured.join("\n")}\n`;
+    let asmText = `${captured.join("\n")}\n`;
+    if (withClib) {
+      const clibAsm = compileClibAsm();
+      asmText = `${clibAsm}\n${asmText}`;
+    }
     writeFile(minac, asmPath, new TextEncoder().encode(asmText));
     return asmPath;
   }

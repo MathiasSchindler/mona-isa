@@ -179,6 +179,14 @@ static int can_open_file(const char *path) {
     return 1;
 }
 
+static const char *map_system_include(const char *inc) {
+    if (!inc) return inc;
+    if (strcmp(inc, "stdio.h") == 0) return "clib.h";
+    if (strcmp(inc, "string.h") == 0) return "clib.h";
+    if (strcmp(inc, "ctype.h") == 0) return "clib.h";
+    return inc;
+}
+
 static char *resolve_include_path(const char *base, const char *inc) {
     char *full = join_path(base, inc);
     if (full && can_open_file(full)) return full;
@@ -189,6 +197,10 @@ static char *resolve_include_path(const char *base, const char *inc) {
     char *alt = join_path(base, rel);
     if (alt && can_open_file(alt)) return alt;
     free(alt);
+
+    char abs[512];
+    snprintf(abs, sizeof(abs), "/clib/include/%s", inc);
+    if (can_open_file(abs)) return dup_string(abs);
     return NULL;
 }
 
@@ -306,22 +318,29 @@ static int preprocess_file(const char *path, MacroTable *macros, Buffer *out, ch
                 }
                 cond_top--;
                 if (!buf_append_n(out, "\n", 1)) { if (out_error && !*out_error) *out_error = dup_error("error: out of memory"); free(src); return 0; }
-            } else if (strncmp(s, "include", 7) == 0 && (s[7] == ' ' || s[7] == '\t' || s[7] == '"')) {
+            } else if (strncmp(s, "include", 7) == 0 && (s[7] == ' ' || s[7] == '\t' || s[7] == '"' || s[7] == '<')) {
                 if (!cond_stack[cond_top - 1]) {
                     if (!buf_append_n(out, "\n", 1)) { if (out_error && !*out_error) *out_error = dup_error("error: out of memory"); free(src); return 0; }
                     goto next_line;
                 }
                 s += 7;
                 s = skip_ws(s);
-                if (*s == '"') {
+                if (*s == '"' || *s == '<') {
+                    char endch = (*s == '<') ? '>' : '"';
                     s++;
-                    const char *q = strchr(s, '"');
+                    const char *q = strchr(s, endch);
                     if (!q) { if (out_error && !*out_error) *out_error = dup_error("error: unterminated include"); free(src); return 0; }
                     size_t inc_len = (size_t)(q - s);
                     char *inc = (char *)malloc(inc_len + 1);
                     if (!inc) { if (out_error && !*out_error) *out_error = dup_error("error: out of memory"); free(src); return 0; }
                     memcpy(inc, s, inc_len);
                     inc[inc_len] = '\0';
+                    const char *mapped = map_system_include(inc);
+                    if (mapped != inc) {
+                        free(inc);
+                        inc = dup_string(mapped);
+                        if (!inc) { if (out_error && !*out_error) *out_error = dup_error("error: out of memory"); free(src); return 0; }
+                    }
                     char *full = resolve_include_path(path, inc);
                     free(inc);
                     if (!full) { if (out_error && !*out_error) *out_error = dup_error("error: include not found"); free(src); return 0; }
@@ -329,7 +348,7 @@ static int preprocess_file(const char *path, MacroTable *macros, Buffer *out, ch
                     free(full);
                     if (!ok) { free(src); return 0; }
                 } else {
-                    if (out_error && !*out_error) *out_error = dup_error("error: expected \"...\" after #include");
+                    if (out_error && !*out_error) *out_error = dup_error("error: expected \"...\" or <...> after #include");
                     free(src);
                     return 0;
                 }

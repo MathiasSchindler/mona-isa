@@ -107,14 +107,18 @@ Sync helper:
 
 Open [wasm/index.html](wasm/index.html). The left pane includes a C editor, Build/Run, and ELF Info. The right pane shows output.
 
-## W9: Supported C library subset
+## W9: C library in the browser
 
-The in‑browser toolchain supports a minimal subset:
-- `putchar(int)`
-- `puts(const char *)` (via compiler lowering)
-- `exit(int)` (via `ecall` syscall)
+The in‑browser toolchain bundles a small `clib` automatically. When users compile C code in the UI, `clib` is linked by default and the compiler prefers library calls.
 
-Other standard library calls are not guaranteed to work in the browser build.
+Supported subset includes:
+- `putchar`, `puts`, `exit`
+- `strlen`, `memcpy`, `memset`
+- `printf`/`vprintf` (limited formats)
+- `isdigit`, `isalpha`, `isspace`
+- `atoi`, `strtol`
+- `write` (fd=1/2), `read` (stub)
+- `malloc`/`free`/`calloc`/`realloc` (minimal)
 
 ## W10: Demo packaging
 
